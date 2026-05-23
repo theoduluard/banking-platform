@@ -66,9 +66,7 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json");
-        response.getWriter().write(
-            "{\"status\":401,\"error\":\"" + message + "\"}"
-        );
+        response.getWriter().write("{\"status\":401,\"error\":\"" + message + "\"}");
     }
 
     private static class AddHeaderRequestWrapper extends HttpServletRequestWrapper {

@@ -1,7 +1,7 @@
 package com.solarisbank.api_gateway.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -10,9 +10,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.util.Collections;
 
 @RestController
-@RequiredArgsConstructor
 public class ProxyController {
 
     private final RestClient restClient = RestClient.create();
@@ -43,7 +43,7 @@ public class ProxyController {
                 .method(HttpMethod.valueOf(request.getMethod()))
                 .uri(URI.create(url));
 
-        java.util.Collections.list(request.getHeaderNames()).stream()
+        Collections.list(request.getHeaderNames()).stream()
                 .filter(h -> !h.equalsIgnoreCase("host"))
                 .forEach(h -> spec.header(h, request.getHeader(h)));
 
@@ -52,7 +52,7 @@ public class ProxyController {
         }
 
         return spec.exchange((req, res) -> {
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            HttpHeaders headers = new HttpHeaders();
             res.getHeaders().forEach((key, values) -> {
                 if (!key.equalsIgnoreCase("Transfer-Encoding")) {
                     headers.addAll(key, values);
