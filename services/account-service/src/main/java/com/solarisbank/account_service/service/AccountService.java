@@ -62,10 +62,10 @@ public class AccountService {
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
         if (account.getStatus() != Account.Status.ACTIVE) {
-            throw new BusinessException("Account is not active", HttpStatus.UNPROCESSABLE_ENTITY);
+            throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }
         if (account.getBalance().compareTo(amount) < 0) {
-            throw new BusinessException("Insufficient funds", HttpStatus.UNPROCESSABLE_ENTITY);
+            throw new BusinessException("Insufficient funds", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         account.setBalance(account.getBalance().subtract(amount));
@@ -78,7 +78,7 @@ public class AccountService {
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
         if (account.getStatus() != Account.Status.ACTIVE) {
-            throw new BusinessException("Account is not active", HttpStatus.UNPROCESSABLE_ENTITY);
+            throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         account.setBalance(account.getBalance().add(amount));

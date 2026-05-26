@@ -37,10 +37,10 @@ public class TransactionService {
         AccountResponse source = accountClient.getAccount(request.getFromAccountId(), userId);
 
         if (!"ACTIVE".equals(source.getStatus())) {
-            throw new BusinessException("Source account is not active", HttpStatus.UNPROCESSABLE_ENTITY);
+            throw new BusinessException("Source account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }
         if (source.getBalance().compareTo(request.getAmount()) < 0) {
-            throw new BusinessException("Insufficient funds", HttpStatus.UNPROCESSABLE_ENTITY);
+            throw new BusinessException("Insufficient funds", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         // 2. Créer la transaction en PENDING

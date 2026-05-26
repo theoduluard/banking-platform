@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
 
     // Corps de requête absent ou illisible
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, Object>> handleMissingBody(HttpMessageNotReadableException ex) {
+    public ResponseEntity<Map<String, Object>> handleMissingBody() {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                 "status", 400,
                 "error", "Malformed or missing request body",
@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGenericException() {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "status", 500,
                 "error", "An unexpected error occurred",
