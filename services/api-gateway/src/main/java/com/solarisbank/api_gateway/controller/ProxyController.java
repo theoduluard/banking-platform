@@ -19,6 +19,7 @@ public class ProxyController {
 
     private static final String AUTH_SERVICE    = "http://localhost:8081";
     private static final String ACCOUNT_SERVICE = "http://localhost:8082";
+    private static final String TRANSACTION_SERVICE = "http://localhost:8083";
 
     @RequestMapping("/api/v1/auth/**")
     public ResponseEntity<byte[]> proxyAuth(
@@ -32,6 +33,13 @@ public class ProxyController {
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
         return forward(request, body, ACCOUNT_SERVICE);
+    }
+
+    @RequestMapping("/api/v1/transactions/**")
+    public ResponseEntity<byte[]> proxyTransactions(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, TRANSACTION_SERVICE);
     }
 
     private ResponseEntity<byte[]> forward(HttpServletRequest request, byte[] body, String targetBase) {

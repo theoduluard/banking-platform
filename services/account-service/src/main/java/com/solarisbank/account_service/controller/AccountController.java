@@ -11,7 +11,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -53,5 +55,24 @@ public class AccountController {
             @RequestParam Account.Status status) {
 
         return ResponseEntity.ok(accountService.updateStatus(id, userId, status));
+    }
+
+    @PostMapping("/{id}/debit")
+    public ResponseEntity<Void> debit(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestBody Map<String, BigDecimal> body) {
+
+        accountService.debit(id, userId, body.get("amount"));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/credit")
+    public ResponseEntity<Void> credit(
+            @PathVariable UUID id,
+            @RequestBody Map<String, BigDecimal> body) {
+
+        accountService.credit(id, body.get("amount"));
+        return ResponseEntity.noContent().build();
     }
 }

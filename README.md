@@ -5,6 +5,17 @@ Projet d'apprentissage couvrant Spring Boot, Spring Cloud Gateway, JPA, JWT, Kaf
 
 ---
 
+## CI/CD & Coverage
+
+| Service | Build | Couverture |
+|---|---|---|
+| api-gateway | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/api-gateway/coverage.svg) |
+| auth-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/auth-service/coverage.svg) |
+| account-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/account-service/coverage.svg) |
+| transaction-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/transaction-service/coverage.svg) |
+
+---
+
 ## Table des matières
 
 - [Architecture](#architecture)

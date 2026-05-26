@@ -1,0 +1,130 @@
+name: Deploy
+
+# Triggered automatically after "Build & Test" succeeds on main.
+# Builds Docker images, pushes them to GHCR, then SSH-deploys to TrueNAS Scale.
+on:
+  workflow_run:
+    workflows: ["Build & Test"]
+    types: [completed]
+    branches: [main]
+
+# Required secrets (Settings → Secrets → Actions):
+#   NAS_HOST        – TrueNAS IP or DDNS hostname
+#   NAS_USER        – SSH user (e.g. root or admin)
+#   NAS_SSH_KEY     – Private SSH key (PEM / OpenSSH format)
+#   NAS_PORT        – SSH port (default 22)
+#   NAS_DEPLOY_PATH – Absolute path on the NAS where docker-compose.prod.yml lives
+#   GHCR_TOKEN      – GitHub PAT with read:packages scope (for NAS to pull images)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/banking-platform
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Guard — skip the entire workflow if CI did not succeed
+  # ─────────────────────────────────────────────────────────────────────────
+  check-ci:
+    name: CI passed?
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo "CI succeeded — proceeding with deployment."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Build & push Docker images to GHCR
+  # All four services build in parallel.
+  # ─────────────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build & Push — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: check-ci
+
+    strategy:
+      matrix:
+        include:
+          - service: auth-service
+            port: 8081
+          - service: account-service
+            port: 8082
+          - service: transaction-service
+            port: 8083
+          - service: api-gateway
+            port: 8080
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache stored in GHCR to speed up subsequent builds
+          cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache
+          cache-to:   type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache,mode=max
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # SSH deploy to TrueNAS Scale
+  # Pulls the freshly pushed images and restarts docker compose.
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to TrueNAS
+    runs-on: ubuntu-latest
+    needs: build-push
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.NAS_HOST }}
+          username: ${{ secrets.NAS_USER }}
+          key:      ${{ secrets.NAS_SSH_KEY }}
+          port:     ${{ secrets.NAS_PORT }}
+          # GHCR_TOKEN and REPO_OWNER are injected as env vars — never echoed
+          envs: GHCR_TOKEN,REPO_OWNER
+          script: |
+            set -e
+
+            # Authenticate to GHCR so private images can be pulled
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$REPO_OWNER" --password-stdin
+
+            # Pull latest images and restart services
+            cd "${{ secrets.NAS_DEPLOY_PATH }}"
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Remove dangling images to save disk space
+            docker image prune -f
+
+            echo "Deployment complete."
+        env:
+          GHCR_TOKEN:  ${{ secrets.GHCR_TOKEN }}
+          REPO_OWNER:  ${{ github.repository_owner }}

@@ -9,7 +9,9 @@ import com.solarisbank.account_service.util.IbanGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,6 +54,35 @@ public class AccountService {
 
         account.setStatus(newStatus);
         return toResponse(accountRepository.save(account));
+    }
+
+    @Transactional
+    public void debit(UUID accountId, UUID userId, BigDecimal amount) {
+        Account account = accountRepository.findByAccountIdAndUserId(accountId, userId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        if (account.getStatus() != Account.Status.ACTIVE) {
+            throw new BusinessException("Account is not active", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new BusinessException("Insufficient funds", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        account.setBalance(account.getBalance().subtract(amount));
+        accountRepository.save(account);
+    }
+
+    @Transactional
+    public void credit(UUID accountId, BigDecimal amount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        if (account.getStatus() != Account.Status.ACTIVE) {
+            throw new BusinessException("Account is not active", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        account.setBalance(account.getBalance().add(amount));
+        accountRepository.save(account);
     }
 
     private AccountResponse toResponse(Account account) {

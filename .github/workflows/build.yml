@@ -45,6 +45,13 @@ jobs:
         working-directory: services/auth-service
         run: ./mvnw verify
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-service-coverage
+          path: services/auth-service/target/site/jacoco/jacoco.csv
+          retention-days: 1
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
@@ -89,11 +96,87 @@ jobs:
         working-directory: services/account-service
         run: ./mvnw verify
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-service-coverage
+          path: services/account-service/target/site/jacoco/jacoco.csv
+          retention-days: 1
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: account-service-jar
           path: services/account-service/target/*.jar
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # transaction-service
+  # ─────────────────────────────────────────
+  transaction-service:
+    name: transaction-service
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: transactions_db
+          POSTGRES_USER: solaris
+          POSTGRES_PASSWORD: solaris123
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      kafka:
+        image: apache/kafka:latest
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build & Test
+        working-directory: services/transaction-service
+        run: ./mvnw verify
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: transaction-service-coverage
+          path: services/transaction-service/target/site/jacoco/jacoco.csv
+          retention-days: 1
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: transaction-service-jar
+          path: services/transaction-service/target/*.jar
           retention-days: 7
 
   # ─────────────────────────────────────────
@@ -118,6 +201,13 @@ jobs:
         working-directory: services/api-gateway
         run: ./mvnw verify
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-gateway-coverage
+          path: services/api-gateway/target/site/jacoco/jacoco.csv
+          retention-days: 1
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
@@ -126,24 +216,114 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────
-  # Rapport final
+  # Coverage badges (main branch only)
+  # Reads JaCoCo CSV artifacts, generates SVG
+  # badges and commits them to the repository.
+  # ─────────────────────────────────────────
+  coverage-badges:
+    name: Coverage Badges
+    runs-on: ubuntu-latest
+    needs: [ auth-service, account-service, transaction-service, api-gateway ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # ── Download JaCoCo CSV reports ──────────────────────────
+      - name: Download auth-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-service-coverage
+          path: /tmp/coverage/auth-service
+
+      - name: Download account-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: account-service-coverage
+          path: /tmp/coverage/account-service
+
+      - name: Download transaction-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: transaction-service-coverage
+          path: /tmp/coverage/transaction-service
+
+      - name: Download api-gateway coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: api-gateway-coverage
+          path: /tmp/coverage/api-gateway
+
+      # ── Generate SVG badges ──────────────────────────────────
+      - name: Badge — auth-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: /tmp/coverage/auth-service/jacoco.csv
+          badges-directory: .github/badges/auth-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — account-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: /tmp/coverage/account-service/jacoco.csv
+          badges-directory: .github/badges/account-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — transaction-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: /tmp/coverage/transaction-service/jacoco.csv
+          badges-directory: .github/badges/transaction-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — api-gateway
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: /tmp/coverage/api-gateway/jacoco.csv
+          badges-directory: .github/badges/api-gateway
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      # ── Commit badges ────────────────────────────────────────
+      - name: Commit and push badges
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/
+          git diff --staged --quiet || (
+            git commit -m "chore: update coverage badges [skip ci]"
+            git push
+          )
+
+  # ─────────────────────────────────────────
+  # Build summary
   # ─────────────────────────────────────────
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ auth-service, account-service, api-gateway ]
+    needs: [ auth-service, account-service, transaction-service, api-gateway ]
     if: always()
 
     steps:
       - name: Check results
         run: |
-          echo "auth-service    → ${{ needs.auth-service.result }}"
-          echo "account-service → ${{ needs.account-service.result }}"
-          echo "api-gateway     → ${{ needs.api-gateway.result }}"
+          echo "auth-service        → ${{ needs.auth-service.result }}"
+          echo "account-service     → ${{ needs.account-service.result }}"
+          echo "transaction-service → ${{ needs.transaction-service.result }}"
+          echo "api-gateway         → ${{ needs.api-gateway.result }}"
 
-          if [[ "${{ needs.auth-service.result }}"    != "success" ||
-                "${{ needs.account-service.result }}" != "success" ||
-                "${{ needs.api-gateway.result }}"     != "success" ]]; then
+          if [[ "${{ needs.auth-service.result }}"        != "success" ||
+                "${{ needs.account-service.result }}"     != "success" ||
+                "${{ needs.transaction-service.result }}" != "success" ||
+                "${{ needs.api-gateway.result }}"         != "success" ]]; then
             echo "One or more services failed to build."
             exit 1
           fi

@@ -2,6 +2,7 @@ package com.solarisbank.auth_service.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +27,16 @@ public class GlobalExceptionHandler {
                 "status", 400,
                 "error", "Validation failed",
                 "fields", fieldErrors,
+                "timestamp", LocalDateTime.now().toString()
+        ));
+    }
+
+    // Corps de requête absent ou illisible
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingBody(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "status", 400,
+                "error", "Malformed or missing request body",
                 "timestamp", LocalDateTime.now().toString()
         ));
     }

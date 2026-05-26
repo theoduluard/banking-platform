@@ -1,0 +1,189 @@
+# Production Docker Compose — TrueNAS Scale
+#
+# Requires a .env file in the same directory with:
+#   DB_PASSWORD=<strong_password>
+#   JWT_SECRET=<base64_encoded_256bit_key>
+#   JWT_EXPIRATION=86400000
+#   JWT_REFRESH_EXPIRATION=604800000
+#
+# First-time setup on the NAS:
+#   1. mkdir -p /path/to/banking-platform && cd /path/to/banking-platform
+#   2. Copy this file as docker-compose.prod.yml
+#   3. Create the .env file with the values above
+#   4. echo "$GHCR_TOKEN" | docker login ghcr.io -u <github_user> --password-stdin
+#   5. docker compose -f docker-compose.prod.yml up -d
+
+services:
+
+  # ── Databases ──────────────────────────────────────────────────────────────
+  postgres-auth:
+    image: postgres:16
+    container_name: postgres-auth
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       auth_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-accounts:
+    image: postgres:16
+    container_name: postgres-accounts
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       accounts_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-accounts-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d accounts_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-transactions:
+    image: postgres:16
+    container_name: postgres-transactions
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       transactions_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-transactions-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d transactions_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  # ── Message broker ─────────────────────────────────────────────────────────
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID:                               1
+      KAFKA_PROCESS_ROLES:                         broker,controller
+      # In Docker Compose, services talk to each other via container name
+      KAFKA_LISTENERS:                             PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS:                  PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS:              1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:        PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME:            PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES:             CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:      1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR:         1
+      CLUSTER_ID:                                  MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - banking-net
+
+  # ── Application services ───────────────────────────────────────────────────
+  auth-service:
+    image: ghcr.io/theoduluard/banking-platform/auth-service:latest
+    container_name: auth-service
+    restart: unless-stopped
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres-auth:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: solaris
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET:                 ${JWT_SECRET}
+      JWT_EXPIRATION:             ${JWT_EXPIRATION}
+      JWT_REFRESH_EXPIRATION:     ${JWT_REFRESH_EXPIRATION}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8081:8081"
+    networks:
+      - banking-net
+
+  account-service:
+    image: ghcr.io/theoduluard/banking-platform/account-service:latest
+    container_name: account-service
+    restart: unless-stopped
+    depends_on:
+      postgres-accounts:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:        jdbc:postgresql://postgres-accounts:5432/accounts_db
+      SPRING_DATASOURCE_USERNAME:   solaris
+      SPRING_DATASOURCE_PASSWORD:   ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET:                   ${JWT_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8082:8082"
+    networks:
+      - banking-net
+
+  transaction-service:
+    image: ghcr.io/theoduluard/banking-platform/transaction-service:latest
+    container_name: transaction-service
+    restart: unless-stopped
+    depends_on:
+      postgres-transactions:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:        jdbc:postgresql://postgres-transactions:5432/transactions_db
+      SPRING_DATASOURCE_USERNAME:   solaris
+      SPRING_DATASOURCE_PASSWORD:   ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ACCOUNT_SERVICE_URL:          http://account-service:8082
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8083:8083"
+    networks:
+      - banking-net
+
+  api-gateway:
+    image: ghcr.io/theoduluard/banking-platform/api-gateway:latest
+    container_name: api-gateway
+    restart: unless-stopped
+    depends_on:
+      - auth-service
+      - account-service
+      - transaction-service
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      # Internal routing — services are reachable by container name
+      AUTH_SERVICE_URL:        http://auth-service:8081
+      ACCOUNT_SERVICE_URL:     http://account-service:8082
+      TRANSACTION_SERVICE_URL: http://transaction-service:8083
+    ports:
+      - "8080:8080"
+    networks:
+      - banking-net
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  postgres-auth-data:
+  postgres-accounts-data:
+  postgres-transactions-data:
+  kafka-data:
+
+# ── Network ───────────────────────────────────────────────────────────────────
+networks:
+  banking-net:
+    driver: bridge
