@@ -45,13 +45,20 @@ jobs:
       matrix:
         include:
           - service: auth-service
+            dir: services/auth-service
             port: 8081
           - service: account-service
+            dir: services/account-service
             port: 8082
           - service: transaction-service
+            dir: services/transaction-service
             port: 8083
           - service: api-gateway
+            dir: services/api-gateway
             port: 8080
+          - service: frontend
+            dir: frontend
+            port: 80
 
     permissions:
       contents: read
@@ -83,7 +90,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./services/${{ matrix.service }}
+          context: ./${{ matrix.dir }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

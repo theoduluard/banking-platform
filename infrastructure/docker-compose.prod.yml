@@ -6,6 +6,11 @@
 #   JWT_EXPIRATION=86400000
 #   JWT_REFRESH_EXPIRATION=604800000
 #
+# Traffic flow:
+#   Internet → router NAT (external:8081 → VM:8080) → frontend nginx
+#   nginx → /          → React SPA (static files)
+#   nginx → /api/*     → api-gateway:8080 (internal, not exposed)
+#
 # First-time setup on the NAS:
 #   1. mkdir -p /path/to/banking-platform && cd /path/to/banking-platform
 #   2. Copy this file as docker-compose.prod.yml
@@ -78,7 +83,6 @@ services:
     environment:
       KAFKA_NODE_ID:                               1
       KAFKA_PROCESS_ROLES:                         broker,controller
-      # In Docker Compose, services talk to each other via container name
       KAFKA_LISTENERS:                             PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS:                  PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_QUORUM_VOTERS:              1@kafka:9093
@@ -103,15 +107,13 @@ services:
       postgres-auth:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres-auth:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: solaris
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET:                 ${JWT_SECRET}
-      JWT_EXPIRATION:             ${JWT_EXPIRATION}
-      JWT_REFRESH_EXPIRATION:     ${JWT_REFRESH_EXPIRATION}
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-auth:5432/auth_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      JWT_SECRET:                    ${JWT_SECRET}
+      JWT_EXPIRATION:                ${JWT_EXPIRATION}
+      JWT_REFRESH_EXPIRATION:        ${JWT_REFRESH_EXPIRATION}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-    ports:
-      - "8081:8081"
     networks:
       - banking-net
 
@@ -125,14 +127,12 @@ services:
       kafka:
         condition: service_started
     environment:
-      SPRING_DATASOURCE_URL:        jdbc:postgresql://postgres-accounts:5432/accounts_db
-      SPRING_DATASOURCE_USERNAME:   solaris
-      SPRING_DATASOURCE_PASSWORD:   ${DB_PASSWORD}
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-accounts:5432/accounts_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET:                   ${JWT_SECRET}
+      JWT_SECRET:                    ${JWT_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-    ports:
-      - "8082:8082"
     networks:
       - banking-net
 
@@ -146,14 +146,12 @@ services:
       kafka:
         condition: service_started
     environment:
-      SPRING_DATASOURCE_URL:        jdbc:postgresql://postgres-transactions:5432/transactions_db
-      SPRING_DATASOURCE_USERNAME:   solaris
-      SPRING_DATASOURCE_PASSWORD:   ${DB_PASSWORD}
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-transactions:5432/transactions_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      ACCOUNT_SERVICE_URL:          http://account-service:8082
+      ACCOUNT_SERVICE_URL:           http://account-service:8082
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-    ports:
-      - "8083:8083"
     networks:
       - banking-net
 
@@ -166,13 +164,25 @@ services:
       - account-service
       - transaction-service
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      # Internal routing — services are reachable by container name
+      JWT_SECRET:              ${JWT_SECRET}
       AUTH_SERVICE_URL:        http://auth-service:8081
       ACCOUNT_SERVICE_URL:     http://account-service:8082
       TRANSACTION_SERVICE_URL: http://transaction-service:8083
+    # Not exposed externally — nginx handles all incoming traffic
+    networks:
+      - banking-net
+
+  # ── Frontend (nginx) ───────────────────────────────────────────────────────
+  # Serves the React SPA and reverse-proxies /api/* to api-gateway.
+  # This is the only container exposed to the host (port 8080 → router NAT 8081).
+  frontend:
+    image: ghcr.io/theoduluard/banking-platform/frontend:latest
+    container_name: frontend
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
     ports:
-      - "8080:8080"
+      - "8080:80"
     networks:
       - banking-net
 

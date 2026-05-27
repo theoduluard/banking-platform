@@ -216,6 +216,32 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────
+  # frontend
+  # ─────────────────────────────────────────
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # ─────────────────────────────────────────
   # Coverage badges (main branch only)
   # Reads JaCoCo CSV artifacts, generates SVG
   # badges and commits them to the repository.
@@ -309,7 +335,7 @@ jobs:
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ auth-service, account-service, transaction-service, api-gateway ]
+    needs: [ auth-service, account-service, transaction-service, api-gateway, frontend ]
     if: always()
 
     steps:
@@ -319,11 +345,13 @@ jobs:
           echo "account-service     → ${{ needs.account-service.result }}"
           echo "transaction-service → ${{ needs.transaction-service.result }}"
           echo "api-gateway         → ${{ needs.api-gateway.result }}"
+          echo "frontend            → ${{ needs.frontend.result }}"
 
           if [[ "${{ needs.auth-service.result }}"        != "success" ||
                 "${{ needs.account-service.result }}"     != "success" ||
                 "${{ needs.transaction-service.result }}" != "success" ||
-                "${{ needs.api-gateway.result }}"         != "success" ]]; then
+                "${{ needs.api-gateway.result }}"         != "success" ||
+                "${{ needs.frontend.result }}"            != "success" ]]; then
             echo "One or more services failed to build."
             exit 1
           fi
