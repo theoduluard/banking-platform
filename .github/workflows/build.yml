@@ -234,36 +234,36 @@ jobs:
         with:
           ref: main
 
-      # ── Download JaCoCo CSV reports ──────────────────────────
+      # ── Download JaCoCo CSV reports (dans le workspace — requis par l'action Docker) ──
       - name: Download auth-service coverage
         uses: actions/download-artifact@v4
         with:
           name: auth-service-coverage
-          path: /tmp/coverage/auth-service
+          path: .github/coverage/auth-service
 
       - name: Download account-service coverage
         uses: actions/download-artifact@v4
         with:
           name: account-service-coverage
-          path: /tmp/coverage/account-service
+          path: .github/coverage/account-service
 
       - name: Download transaction-service coverage
         uses: actions/download-artifact@v4
         with:
           name: transaction-service-coverage
-          path: /tmp/coverage/transaction-service
+          path: .github/coverage/transaction-service
 
       - name: Download api-gateway coverage
         uses: actions/download-artifact@v4
         with:
           name: api-gateway-coverage
-          path: /tmp/coverage/api-gateway
+          path: .github/coverage/api-gateway
 
       # ── Generate SVG badges ──────────────────────────────────
       - name: Badge — auth-service
         uses: cicirello/jacoco-badge-generator@v2
         with:
-          jacoco-csv-file: /tmp/coverage/auth-service/jacoco.csv
+          jacoco-csv-file: .github/coverage/auth-service/jacoco.csv
           badges-directory: .github/badges/auth-service
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
@@ -271,7 +271,7 @@ jobs:
       - name: Badge — account-service
         uses: cicirello/jacoco-badge-generator@v2
         with:
-          jacoco-csv-file: /tmp/coverage/account-service/jacoco.csv
+          jacoco-csv-file: .github/coverage/account-service/jacoco.csv
           badges-directory: .github/badges/account-service
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
@@ -279,7 +279,7 @@ jobs:
       - name: Badge — transaction-service
         uses: cicirello/jacoco-badge-generator@v2
         with:
-          jacoco-csv-file: /tmp/coverage/transaction-service/jacoco.csv
+          jacoco-csv-file: .github/coverage/transaction-service/jacoco.csv
           badges-directory: .github/badges/transaction-service
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
@@ -287,7 +287,7 @@ jobs:
       - name: Badge — api-gateway
         uses: cicirello/jacoco-badge-generator@v2
         with:
-          jacoco-csv-file: /tmp/coverage/api-gateway/jacoco.csv
+          jacoco-csv-file: .github/coverage/api-gateway/jacoco.csv
           badges-directory: .github/badges/api-gateway
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
