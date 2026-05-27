@@ -24,7 +24,6 @@ Projet d'apprentissage couvrant Spring Boot, Spring Cloud Gateway, JPA, JWT, Kaf
 - [Lancer le projet](#lancer-le-projet)
 - [API Reference](#api-reference)
 - [Structure du projet](#structure-du-projet)
-- [Documentation](#documentation)
 
 ---
 
@@ -279,36 +278,21 @@ Authorization: Bearer <token>
 ```
 banking-platform/
 ├── services/
-│   ├── api-gateway/          # Spring Cloud Gateway MVC — port 8080
-│   ├── auth-service/         # Authentification JWT — port 8081
-│   ├── account-service/      # Comptes bancaires — port 8082
-│   ├── transaction-service/  # (à venir) — port 8083
+│   ├── api-gateway/             # Spring Cloud Gateway MVC — port 8080
+│   ├── auth-service/            # Authentification JWT — port 8081
+│   ├── account-service/         # Comptes bancaires — port 8082
+│   ├── transaction-service/     # Virements Kafka/Saga — port 8083
 │   ├── fraud-detection-service/ # (à venir) — port 8084
-│   └── report-service/       # (à venir) — port 8085
+│   └── report-service/          # (à venir) — port 8085
 │
 ├── frontend/
-│   └── banking-ui/           # React + Vite (à venir)
+│   └── banking-ui/              # React + Vite (à venir)
 │
-├── infrastructure/
-│   └── docker-compose.yml    # PostgreSQL, Kafka, Redis (à venir)
-│
-└── docs/
-    ├── memo-auth-service.md      # Cours — auth-service
-    ├── memo-account-service.md   # Cours — account-service
-    └── memo-api-gateway.md       # Cours — API Gateway
+└── infrastructure/
+    ├── docker-compose.yml        # Environnement local (PostgreSQL, Kafka)
+    ├── docker-compose.prod.yml   # Production (images GHCR)
+    └── vm-setup/                 # Scripts de provisioning de la VM de déploiement
 ```
-
----
-
-## Documentation
-
-Les fichiers dans `docs/` sont des mémos pédagogiques qui expliquent les concepts, annotations et décisions d'architecture de chaque service.
-
-| Fichier | Contenu |
-|---|---|
-| [memo-auth-service.md](docs/memo-auth-service.md) | Spring Security, JWT, BCrypt, validation, gestion des erreurs |
-| [memo-account-service.md](docs/memo-account-service.md) | JPA, BigDecimal, IBAN/MOD-97, DTOs, Repository |
-| [memo-api-gateway.md](docs/memo-api-gateway.md) | Gateway, RestClient, OncePerRequestFilter, Transfer-Encoding |
 
 ---
 
