@@ -1,6 +1,7 @@
 package com.solarisbank.api_gateway.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -15,31 +16,36 @@ import java.util.Collections;
 @RestController
 public class ProxyController {
 
-    private final RestClient restClient = RestClient.create();
+    private RestClient restClient = RestClient.create();
 
-    private static final String AUTH_SERVICE    = "http://localhost:8081";
-    private static final String ACCOUNT_SERVICE = "http://localhost:8082";
-    private static final String TRANSACTION_SERVICE = "http://localhost:8083";
+    @Value("${auth.service.url:http://localhost:8081}")
+    private String authServiceUrl;
+
+    @Value("${account.service.url:http://localhost:8082}")
+    private String accountServiceUrl;
+
+    @Value("${transaction.service.url:http://localhost:8083}")
+    private String transactionServiceUrl;
 
     @RequestMapping("/api/v1/auth/**")
     public ResponseEntity<byte[]> proxyAuth(
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
-        return forward(request, body, AUTH_SERVICE);
+        return forward(request, body, authServiceUrl);
     }
 
     @RequestMapping("/api/v1/accounts/**")
     public ResponseEntity<byte[]> proxyAccounts(
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
-        return forward(request, body, ACCOUNT_SERVICE);
+        return forward(request, body, accountServiceUrl);
     }
 
     @RequestMapping("/api/v1/transactions/**")
     public ResponseEntity<byte[]> proxyTransactions(
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
-        return forward(request, body, TRANSACTION_SERVICE);
+        return forward(request, body, transactionServiceUrl);
     }
 
     private ResponseEntity<byte[]> forward(HttpServletRequest request, byte[] body, String targetBase) {

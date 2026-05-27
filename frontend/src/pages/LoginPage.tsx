@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Landmark } from 'lucide-react'
+import axios from 'axios'
 import api from '@/lib/api'
 import { setToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
@@ -30,8 +31,19 @@ export default function LoginPage() {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
       navigate('/dashboard')
-    } catch {
-      toast.error('Email ou mot de passe incorrect.')
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status
+        if (status === 401 || status === 400) {
+          toast.error('Email ou mot de passe incorrect.')
+        } else if (!err.response) {
+          toast.error('Impossible de joindre le serveur. Vérifiez votre connexion.')
+        } else {
+          toast.error(`Erreur serveur (${status}). Réessayez dans quelques instants.`)
+        }
+      } else {
+        toast.error('Une erreur inattendue est survenue.')
+      }
     }
   }
 

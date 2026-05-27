@@ -35,9 +35,12 @@ class ProxyControllerTest {
         // Créer un RestClient adossé au RestTemplate mocké
         RestClient testClient = RestClient.builder(restTemplate).build();
 
-        // Injecter le RestClient de test dans le contrôleur via réflexion
+        // Injecter le RestClient et les URLs de test dans le contrôleur via réflexion
         ProxyController controller = new ProxyController();
-        ReflectionTestUtils.setField(controller, "restClient", testClient);
+        ReflectionTestUtils.setField(controller, "restClient",          testClient);
+        ReflectionTestUtils.setField(controller, "authServiceUrl",       "http://localhost:8081");
+        ReflectionTestUtils.setField(controller, "accountServiceUrl",    "http://localhost:8082");
+        ReflectionTestUtils.setField(controller, "transactionServiceUrl","http://localhost:8083");
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }

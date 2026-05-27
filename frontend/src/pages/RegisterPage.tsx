@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Landmark } from 'lucide-react'
+import axios from 'axios'
 import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,8 +33,19 @@ export default function RegisterPage() {
       await api.post('/api/v1/auth/register', { email, password })
       toast.success('Compte créé ! Connectez-vous.')
       navigate('/login')
-    } catch {
-      toast.error('Cet email est déjà utilisé.')
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status
+        if (status === 409 || status === 400) {
+          toast.error('Cet email est déjà utilisé.')
+        } else if (!err.response) {
+          toast.error('Impossible de joindre le serveur. Vérifiez votre connexion.')
+        } else {
+          toast.error(`Erreur serveur (${status}). Réessayez dans quelques instants.`)
+        }
+      } else {
+        toast.error('Une erreur inattendue est survenue.')
+      }
     }
   }
 
