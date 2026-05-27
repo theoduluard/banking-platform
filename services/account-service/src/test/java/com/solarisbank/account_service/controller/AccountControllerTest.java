@@ -161,4 +161,17 @@ class AccountControllerTest {
                         .content(objectMapper.writeValueAsString(Map.of("amount", "200.00"))))
                 .andExpect(status().isNoContent());
     }
+
+    // ── GlobalExceptionHandler — 500 générique ────────────────────────────────
+
+    @Test
+    void getMyAccounts_shouldReturn500_whenUnexpectedErrorOccurs() throws Exception {
+        when(accountService.getMyAccounts(userId))
+                .thenThrow(new RuntimeException("Unexpected database error"));
+
+        mockMvc.perform(get("/api/v1/accounts")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500));
+    }
 }

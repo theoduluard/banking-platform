@@ -147,4 +147,17 @@ class TransactionControllerTest {
                         .header("X-User-Id", userId.toString()))
                 .andExpect(status().isForbidden());
     }
+
+    // ── GlobalExceptionHandler — 500 générique ────────────────────────────────
+
+    @Test
+    void getHistory_shouldReturn500_whenUnexpectedErrorOccurs() throws Exception {
+        when(transactionService.getHistory(any(), eq(0), eq(20)))
+                .thenThrow(new RuntimeException("Unexpected error"));
+
+        mockMvc.perform(get("/api/v1/transactions")
+                        .param("accountId", fromAccountId.toString()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500));
+    }
 }
