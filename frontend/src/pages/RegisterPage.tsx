@@ -11,9 +11,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+
 const schema = z.object({
+  firstname:       z.string().min(1, 'Prénom requis'),
+  lastname:        z.string().min(1, 'Nom requis'),
   email:           z.string().email('Email invalide'),
-  password:        z.string().min(8, '8 caractères minimum'),
+  password:        z.string()
+    .min(8, '8 caractères minimum')
+    .regex(PASSWORD_PATTERN, 'Doit contenir une majuscule, une minuscule, un chiffre et un caractère spécial (@$!%*?&)'),
   confirmPassword: z.string(),
 }).refine((d) => d.password === d.confirmPassword, {
   message: 'Les mots de passe ne correspondent pas',
@@ -28,16 +34,18 @@ export default function RegisterPage() {
     resolver: zodResolver(schema),
   })
 
-  async function onSubmit({ email, password }: FormData) {
+  async function onSubmit({ firstname, lastname, email, password }: FormData) {
     try {
-      await api.post('/api/v1/auth/register', { email, password })
+      await api.post('/api/v1/auth/register', { firstname, lastname, email, password })
       toast.success('Compte créé ! Connectez-vous.')
       navigate('/login')
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status
-        if (status === 409 || status === 400) {
+        if (status === 409) {
           toast.error('Cet email est déjà utilisé.')
+        } else if (status === 400) {
+          toast.error('Données invalides. Vérifiez les champs.')
         } else if (!err.response) {
           toast.error('Impossible de joindre le serveur. Vérifiez votre connexion.')
         } else {
@@ -62,6 +70,19 @@ export default function RegisterPage() {
 
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="firstname">Prénom</Label>
+                <Input id="firstname" placeholder="Jean" {...register('firstname')} />
+                {errors.firstname && <p className="text-xs text-destructive">{errors.firstname.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lastname">Nom</Label>
+                <Input id="lastname" placeholder="Dupont" {...register('lastname')} />
+                {errors.lastname && <p className="text-xs text-destructive">{errors.lastname.message}</p>}
+              </div>
+            </div>
+
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="jean@example.com" {...register('email')} />
