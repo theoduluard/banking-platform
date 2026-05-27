@@ -140,8 +140,8 @@ class ProxyControllerTest {
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("{\"content\":[]}", MediaType.APPLICATION_JSON));
 
-        mockMvc.perform(get("/api/v1/transactions")
-                        .param("accountId", accountId.toString()))
+        // Use query string in the URL directly so MockMvc populates request.getQueryString()
+        mockMvc.perform(get("/api/v1/transactions?accountId=" + accountId))
                 .andExpect(status().isOk());
 
         mockServer.verify();
@@ -174,12 +174,14 @@ class ProxyControllerTest {
 
     @Test
     void proxy_shouldForwardDownstreamStatusCode() throws Exception {
-        mockServer.expect(requestTo("http://localhost:8082/api/v1/accounts/" + UUID.randomUUID()))
+        UUID accountId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/accounts/" + accountId))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body("{\"error\":\"Account not found\"}"));
 
-        mockMvc.perform(get("/api/v1/accounts/{id}", UUID.randomUUID()))
+        mockMvc.perform(get("/api/v1/accounts/{id}", accountId))
                 .andExpect(status().isNotFound());
 
         mockServer.verify();
