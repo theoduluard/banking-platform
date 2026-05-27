@@ -33,8 +33,7 @@ jobs:
       - run: echo "CI succeeded — proceeding with deployment."
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Build & push Docker images to GHCR
-  # All four services build in parallel.
+  # Build & push Docker images to GHCR (all 5 services in parallel)
   # ─────────────────────────────────────────────────────────────────────────
   build-push:
     name: Build & Push — ${{ matrix.service }}
@@ -46,19 +45,14 @@ jobs:
         include:
           - service: auth-service
             dir: services/auth-service
-            port: 8081
           - service: account-service
             dir: services/account-service
-            port: 8082
           - service: transaction-service
             dir: services/transaction-service
-            port: 8083
           - service: api-gateway
             dir: services/api-gateway
-            port: 8080
           - service: frontend
             dir: frontend
-            port: 80
 
     permissions:
       contents: read
@@ -94,13 +88,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Layer cache stored in GHCR to speed up subsequent builds
           cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache
           cache-to:   type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache,mode=max
 
   # ─────────────────────────────────────────────────────────────────────────
-  # SSH deploy to TrueNAS Scale
-  # Pulls the freshly pushed images and restarts docker compose.
+  # Copy the latest docker-compose.prod.yml to the VM, then pull & restart.
   # ─────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to TrueNAS
@@ -108,6 +100,21 @@ jobs:
     needs: build-push
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Push the up-to-date compose file to the VM before restarting
+      - name: Copy docker-compose.prod.yml to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:    ${{ secrets.NAS_HOST }}
+          username: ${{ secrets.NAS_USER }}
+          key:     ${{ secrets.NAS_SSH_KEY }}
+          port:    ${{ secrets.NAS_PORT }}
+          source:  infrastructure/docker-compose.prod.yml
+          target:  ${{ secrets.NAS_DEPLOY_PATH }}
+          strip_components: 1   # removes the "infrastructure/" prefix on the VM
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -115,7 +122,6 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          # GHCR_TOKEN and REPO_OWNER are injected as env vars — never echoed
           envs: GHCR_TOKEN,REPO_OWNER
           script: |
             set -e
