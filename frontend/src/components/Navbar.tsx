@@ -1,17 +1,18 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { removeToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
-import { Landmark, ArrowLeftRight, PlusCircle, LogOut } from 'lucide-react'
+import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import Logo from './Logo'
 
 const navLinks = [
-  { to: '/dashboard', label: 'Comptes', icon: Landmark },
-  { to: '/transfer',  label: 'Virement', icon: ArrowLeftRight },
-  { to: '/accounts/new', label: 'Nouveau compte', icon: PlusCircle },
+  { to: '/dashboard',    label: 'Tableau de bord', icon: LayoutDashboard },
+  { to: '/transfer',     label: 'Virement',         icon: ArrowLeftRight },
+  { to: '/accounts/new', label: 'Nouveau compte',   icon: PlusCircle },
 ]
 
 export default function Navbar() {
-  const navigate  = useNavigate()
+  const navigate     = useNavigate()
   const { pathname } = useLocation()
 
   function handleLogout() {
@@ -20,38 +21,50 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-        <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-foreground">
-          <Landmark size={20} />
-          <span>Solaris Bank</span>
+    <header className="sticky top-0 z-50 border-b border-border/60 bg-card/90 backdrop-blur-md shadow-sm">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+
+        {/* Brand */}
+        <Link to="/dashboard" className="shrink-0">
+          <Logo size={32} />
         </Link>
 
-        <nav className="flex items-center gap-1">
-          {navLinks.map(({ to, label, icon: Icon }) => (
-            <Button
-              key={to}
-              variant="ghost"
-              size="sm"
-              asChild
-              className={cn(
-                'gap-1.5 text-muted-foreground',
-                pathname === to && 'bg-accent text-accent-foreground',
-              )}
-            >
-              <Link to={to}>
-                <Icon size={15} />
-                {label}
-              </Link>
-            </Button>
-          ))}
-
-          <Button variant="ghost" size="sm" onClick={handleLogout}
-            className="ml-2 gap-1.5 text-muted-foreground">
-            <LogOut size={15} />
-            Déconnexion
-          </Button>
+        {/* Nav links */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {navLinks.map(({ to, label, icon: Icon }) => {
+            const active = pathname === to
+            return (
+              <Button
+                key={to}
+                variant="ghost"
+                size="sm"
+                asChild
+                className={cn(
+                  'h-9 gap-2 px-3 text-sm font-medium transition-colors',
+                  active
+                    ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Link to={to}>
+                  <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
+                  {label}
+                </Link>
+              </Button>
+            )
+          })}
         </nav>
+
+        {/* Logout */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleLogout}
+          className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
+        >
+          <LogOut size={15} />
+          <span className="hidden sm:inline">Déconnexion</span>
+        </Button>
       </div>
     </header>
   )
