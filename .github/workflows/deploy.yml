@@ -15,6 +15,8 @@ on:
 #   NAS_PORT        – SSH port (default 22)
 #   NAS_DEPLOY_PATH – Absolute path on the NAS where docker-compose.prod.yml lives
 #   GHCR_TOKEN      – GitHub PAT with read:packages scope (for NAS to pull images)
+#   ADMIN_EMAIL     – Bootstrap admin account email
+#   ADMIN_PASSWORD  – Bootstrap admin account password (strong)
 
 env:
   REGISTRY: ghcr.io
@@ -122,7 +124,7 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER
+          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD
           script: |
             set -e
 
@@ -132,12 +134,15 @@ jobs:
             # Pull latest images and restart services
             cd "${{ secrets.NAS_DEPLOY_PATH }}"
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             # Remove dangling images to save disk space
             docker image prune -f
 
             echo "Deployment complete."
         env:
-          GHCR_TOKEN:  ${{ secrets.GHCR_TOKEN }}
-          REPO_OWNER:  ${{ github.repository_owner }}
+          GHCR_TOKEN:     ${{ secrets.GHCR_TOKEN }}
+          REPO_OWNER:     ${{ github.repository_owner }}
+          ADMIN_EMAIL:    ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}

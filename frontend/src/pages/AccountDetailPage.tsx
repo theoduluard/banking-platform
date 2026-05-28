@@ -8,50 +8,60 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { ArrowLeftRight, ArrowLeft, TrendingDown, TrendingUp, Clock } from 'lucide-react'
+import { ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight, Clock, CreditCard, PiggyBank } from 'lucide-react'
 import { useState } from 'react'
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount)
 }
-
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
 }
 
-function statusBadge(status: Transaction['status']) {
+function StatusBadge({ status }: { status: Transaction['status'] }) {
   const map = {
-    COMPLETED: { label: 'Complété',  variant: 'default'     },
-    PENDING:   { label: 'En attente', variant: 'secondary'   },
-    FAILED:    { label: 'Échoué',     variant: 'destructive' },
+    COMPLETED: { label: 'Complété',   className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    PENDING:   { label: 'En attente', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+    FAILED:    { label: 'Échoué',     className: 'bg-red-50 text-red-700 border-red-200' },
   } as const
-  const { label, variant } = map[status]
-  return <Badge variant={variant}>{label}</Badge>
+  const { label, className } = map[status]
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${className}`}>
+      {label}
+    </span>
+  )
 }
 
 function TransactionRow({ tx, accountId }: { tx: Transaction; accountId: string }) {
   const isDebit = tx.fromAccountId === accountId
-  const sign    = isDebit ? '-' : '+'
-  const Icon    = isDebit ? TrendingDown : TrendingUp
 
   return (
-    <div className="flex items-center justify-between py-3">
-      <div className="flex items-center gap-3">
-        <div className={`flex size-8 items-center justify-center rounded-full ${isDebit ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-600'}`}>
-          <Icon size={15} />
-        </div>
-        <div>
-          <p className="text-sm font-medium">
-            {tx.type === 'TRANSFER' ? (isDebit ? 'Virement émis' : 'Virement reçu') : tx.type}
-          </p>
-          <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
-        </div>
+    <div className="flex items-center gap-3 py-3.5">
+      <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+        isDebit ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'
+      }`}>
+        {isDebit
+          ? <ArrowUpRight size={16} />
+          : <ArrowDownLeft size={16} />
+        }
       </div>
-      <div className="flex items-center gap-3">
-        {statusBadge(tx.status)}
-        <p className={`w-24 text-right tabular-nums text-sm font-semibold ${isDebit ? 'text-destructive' : 'text-green-600'}`}>
-          {sign} {formatAmount(tx.amount, tx.currency)}
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {tx.type === 'TRANSFER'
+            ? (isDebit ? 'Virement émis' : 'Virement reçu')
+            : tx.type}
         </p>
+        <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
+      </div>
+
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <p className={`text-sm font-semibold tabular-nums ${
+          isDebit ? 'text-red-600' : 'text-emerald-600'
+        }`}>
+          {isDebit ? '−' : '+'} {formatAmount(tx.amount, tx.currency)}
+        </p>
+        <StatusBadge status={tx.status} />
       </div>
     </div>
   )
@@ -59,7 +69,7 @@ function TransactionRow({ tx, accountId }: { tx: Transaction; accountId: string 
 
 export default function AccountDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const userId = getUserIdFromToken()
+  const userId  = getUserIdFromToken()
   const [page, setPage] = useState(0)
 
   const { data: account, isLoading: loadingAccount } = useQuery<Account>({
@@ -82,81 +92,98 @@ export default function AccountDetailPage() {
     enabled: !!id,
   })
 
+  const isChecking = account?.type === 'CHECKING'
+
   return (
     <div className="space-y-6">
       {/* Back */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1 text-muted-foreground">
-        <Link to="/dashboard">
-          <ArrowLeft size={14} /> Retour
-        </Link>
+      <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
+        <Link to="/dashboard"><ArrowLeft size={14} /> Retour</Link>
       </Button>
 
-      {/* Account summary */}
-      {loadingAccount ? (
-        <Skeleton className="h-28 w-full rounded-xl" />
-      ) : account ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle>{account.type === 'CHECKING' ? 'Compte courant' : 'Compte épargne'}</CardTitle>
-                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{account.iban}</p>
-              </div>
-              <Badge variant={account.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                {account.status === 'ACTIVE' ? 'Actif' : 'Fermé'}
-              </Badge>
+      {/* Account header */}
+      {loadingAccount
+        ? <Skeleton className="h-36 w-full rounded-2xl" />
+        : account && (
+          <div className={`relative overflow-hidden rounded-2xl p-6 text-white shadow-lg ${
+            isChecking ? 'bg-primary' : 'bg-[oklch(0.50_0.14_82)]'
+          }`}>
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
             </div>
-          </CardHeader>
-          <CardContent className="flex items-end justify-between pt-0">
-            <p className="text-3xl font-bold tabular-nums">
-              {formatAmount(account.balance, account.currency)}
-            </p>
-            <Button asChild size="sm" className="gap-1.5">
-              <Link to="/transfer">
-                <ArrowLeftRight size={14} />
-                Virer
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+            <div className="relative z-10 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-white/20">
+                    {isChecking ? <CreditCard size={16} /> : <PiggyBank size={16} />}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{isChecking ? 'Compte courant' : 'Compte épargne'}</p>
+                    <p className="font-mono text-[10px] tracking-wider text-white/60">{account.iban}</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs text-white/60">Solde disponible</p>
+                  <p className="mt-0.5 text-3xl font-bold tabular-nums">
+                    {formatAmount(account.balance, account.currency)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[10px]">
+                  {account.status === 'ACTIVE' ? 'Actif' : 'Fermé'}
+                </Badge>
+                <Button size="sm" variant="secondary" asChild
+                  className="mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0">
+                  <Link to="/transfer">
+                    <ArrowLeftRight size={13} /> Virer
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
-      {/* Transaction history */}
+      {/* Transactions */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Historique des transactions</CardTitle>
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="text-sm font-semibold">Historique des transactions</CardTitle>
         </CardHeader>
-        <CardContent className="px-4">
-          {loadingTx && <Skeleton className="h-40 w-full" />}
+        <CardContent className="p-0">
+          {loadingTx && (
+            <div className="space-y-4 p-4">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          )}
 
-          {!loadingTx && txPage && txPage.content.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-8 text-center text-muted-foreground">
-              <Clock size={32} />
+          {!loadingTx && txPage?.content.length === 0 && (
+            <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <Clock size={28} className="text-muted-foreground/50" />
               <p className="text-sm">Aucune transaction pour ce compte.</p>
             </div>
           )}
 
           {!loadingTx && txPage && txPage.content.length > 0 && (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border px-4">
               {txPage.content.map(tx => (
                 <TransactionRow key={tx.id} tx={tx} accountId={id!} />
               ))}
             </div>
           )}
 
-          {/* Pagination */}
           {txPage && txPage.totalPages > 1 && (
             <>
-              <Separator className="mt-4" />
-              <div className="flex items-center justify-between pt-4 text-sm text-muted-foreground">
+              <Separator />
+              <div className="flex items-center justify-between px-4 py-3 text-xs text-muted-foreground">
                 <span>Page {txPage.number + 1} / {txPage.totalPages}</span>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={txPage.first}
-                    onClick={() => setPage(p => p - 1)}>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                    disabled={txPage.first} onClick={() => setPage(p => p - 1)}>
                     Précédent
                   </Button>
-                  <Button variant="outline" size="sm" disabled={txPage.last}
-                    onClick={() => setPage(p => p + 1)}>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                    disabled={txPage.last} onClick={() => setPage(p => p + 1)}>
                     Suivant
                   </Button>
                 </div>

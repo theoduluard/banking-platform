@@ -5,6 +5,8 @@
 #   JWT_SECRET=<base64_encoded_256bit_key>
 #   JWT_EXPIRATION=86400000
 #   JWT_REFRESH_EXPIRATION=604800000
+#   ADMIN_EMAIL=<admin_email>
+#   ADMIN_PASSWORD=<strong_admin_password>
 #
 # Traffic flow:
 #   Internet → router NAT (external:8081 → VM:8080) → frontend nginx
@@ -113,6 +115,8 @@ services:
       JWT_SECRET:                    ${JWT_SECRET}
       JWT_EXPIRATION:                ${JWT_EXPIRATION}
       JWT_REFRESH_EXPIRATION:        ${JWT_REFRESH_EXPIRATION}
+      ADMIN_EMAIL:                   ${ADMIN_EMAIL}
+      ADMIN_PASSWORD:                ${ADMIN_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
     networks:
       - banking-net

@@ -48,6 +48,29 @@ public class ProxyController {
         return forward(request, body, transactionServiceUrl);
     }
 
+    // ── Admin routes (gateway already enforced ADMIN role) ────────────────────
+
+    @RequestMapping("/api/v1/admin/users/**")
+    public ResponseEntity<byte[]> proxyAdminUsers(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, authServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/accounts/**")
+    public ResponseEntity<byte[]> proxyAdminAccounts(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, accountServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/transactions/**")
+    public ResponseEntity<byte[]> proxyAdminTransactions(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, transactionServiceUrl);
+    }
+
     private ResponseEntity<byte[]> forward(HttpServletRequest request, byte[] body, String targetBase) {
         String path  = request.getRequestURI();
         String query = request.getQueryString();

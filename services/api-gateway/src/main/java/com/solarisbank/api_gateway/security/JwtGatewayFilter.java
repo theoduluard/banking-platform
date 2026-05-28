@@ -14,7 +14,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -26,6 +28,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             "/api/v1/auth/login",
             "/api/v1/auth/register"
     );
+
+    private static final String ADMIN_PATH_PREFIX = "/api/v1/admin/";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -42,7 +46,7 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            writeUnauthorized(response, "Missing or invalid Authorization header");
+            writeError(response, HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
             return;
         }
 
@@ -50,50 +54,64 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
 
         try {
             if (!jwtService.isTokenValid(token)) {
-                writeUnauthorized(response, "Token is expired or invalid");
+                writeError(response, HttpStatus.UNAUTHORIZED, "Token is expired or invalid");
                 return;
             }
 
             String userId = jwtService.extractUserId(token);
+            String role   = jwtService.extractRole(token);
 
-            filterChain.doFilter(new AddHeaderRequestWrapper(request, userId), response);
+            // Block admin paths for non-admin users
+            if (path.startsWith(ADMIN_PATH_PREFIX) && !"ADMIN".equals(role)) {
+                writeError(response, HttpStatus.FORBIDDEN, "Access denied: admin only");
+                return;
+            }
+
+            filterChain.doFilter(new EnrichedRequestWrapper(request, userId, role), response);
 
         } catch (Exception e) {
-            writeUnauthorized(response, "Token is invalid");
+            writeError(response, HttpStatus.UNAUTHORIZED, "Token is invalid");
         }
     }
 
-    private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
-        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+    private void writeError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
+        response.setStatus(status.value());
         response.setContentType("application/json");
-        response.getWriter().write("{\"status\":401,\"error\":\"" + message + "\"}");
+        response.getWriter().write("{\"status\":" + status.value() + ",\"error\":\"" + message + "\"}");
     }
 
-    private static class AddHeaderRequestWrapper extends HttpServletRequestWrapper {
+    // ── Request wrapper that injects X-User-Id and X-User-Role headers ────────
 
-        private final String userId;
+    private static class EnrichedRequestWrapper extends HttpServletRequestWrapper {
 
-        public AddHeaderRequestWrapper(HttpServletRequest request, String userId) {
+        private final Map<String, String> extraHeaders = new HashMap<>();
+
+        public EnrichedRequestWrapper(HttpServletRequest request, String userId, String role) {
             super(request);
-            this.userId = userId;
+            extraHeaders.put("X-User-Id",   userId);
+            extraHeaders.put("X-User-Role", role != null ? role : "");
         }
 
         @Override
         public String getHeader(String name) {
-            if ("X-User-Id".equals(name)) return userId;
+            String override = extraHeaders.get(name);
+            if (override != null) return override;
             return super.getHeader(name);
         }
 
         @Override
         public Enumeration<String> getHeaders(String name) {
-            if ("X-User-Id".equals(name)) return Collections.enumeration(List.of(userId));
+            String override = extraHeaders.get(name);
+            if (override != null) return Collections.enumeration(List.of(override));
             return super.getHeaders(name);
         }
 
         @Override
         public Enumeration<String> getHeaderNames() {
             List<String> names = Collections.list(super.getHeaderNames());
-            names.add("X-User-Id");
+            extraHeaders.keySet().forEach(k -> {
+                if (!names.contains(k)) names.add(k);
+            });
             return Collections.enumeration(names);
         }
     }

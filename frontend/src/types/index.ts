@@ -67,3 +67,42 @@ export interface Page<T> {
   first: boolean
   last: boolean
 }
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+
+export type UserRole = 'CLIENT' | 'ADMIN'
+
+export interface AdminUser {
+  userId: string
+  email: string
+  firstname: string
+  lastname: string
+  role: UserRole
+  isActive: boolean
+  createdAt: string
+}
+
+export type AccountStatusAdmin = 'ACTIVE' | 'BLOCKED' | 'CLOSED'
+
+export interface AdminAccount {
+  id: string
+  iban: string
+  type: AccountType
+  balance: number
+  currency: string
+  status: AccountStatusAdmin
+  createdAt: string
+}
+
+export interface AdminTransaction {
+  id: string
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  currency: string
+  type: TransactionType
+  status: TransactionStatus
+  description: string | null
+  createdAt: string
+  completedAt: string | null
+}

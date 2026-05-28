@@ -14,14 +14,27 @@ export function isAuthenticated(): boolean {
   return !!getToken()
 }
 
-/** Decode the 'sub' claim from a JWT (no verification — display only). */
-export function getUserIdFromToken(): string | null {
-  const token = getToken()
-  if (!token) return null
+/** Decode the JWT payload (no verification — display only). */
+function decodePayload(token: string): Record<string, unknown> | null {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    return payload.sub ?? null
+    return JSON.parse(atob(token.split('.')[1]))
   } catch {
     return null
   }
+}
+
+/** Decode the 'sub' claim (userId) from the JWT. */
+export function getUserIdFromToken(): string | null {
+  const token = getToken()
+  if (!token) return null
+  const p = decodePayload(token)
+  return (p?.sub as string) ?? null
+}
+
+/** Decode the 'role' claim from the JWT. Returns 'CLIENT' | 'ADMIN' | null. */
+export function getUserRoleFromToken(): string | null {
+  const token = getToken()
+  if (!token) return null
+  const p = decodePayload(token)
+  return (p?.role as string) ?? null
 }
