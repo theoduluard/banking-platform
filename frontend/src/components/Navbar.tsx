@@ -1,7 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { removeToken } from '@/lib/auth'
+import { removeToken, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
-import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard } from 'lucide-react'
+import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from './Logo'
 
@@ -14,6 +14,7 @@ const navLinks = [
 export default function Navbar() {
   const navigate     = useNavigate()
   const { pathname } = useLocation()
+  const isAdmin      = getUserRoleFromToken() === 'ADMIN'
 
   function handleLogout() {
     removeToken()
@@ -55,16 +56,38 @@ export default function Navbar() {
           })}
         </nav>
 
-        {/* Logout */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLogout}
-          className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
-        >
-          <LogOut size={15} />
-          <span className="hidden sm:inline">Déconnexion</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Admin panel shortcut (ADMIN only) */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className={cn(
+                'h-9 gap-2 px-3 text-sm font-medium',
+                pathname.startsWith('/admin')
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Link to="/admin">
+                <ShieldCheck size={14} />
+                <span className="hidden sm:inline">Admin</span>
+              </Link>
+            </Button>
+          )}
+
+          {/* Logout */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
+          >
+            <LogOut size={15} />
+            <span className="hidden sm:inline">Déconnexion</span>
+          </Button>
+        </div>
       </div>
     </header>
   )
