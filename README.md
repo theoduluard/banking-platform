@@ -362,3 +362,10 @@ banking-platform/
 | CI/CD | GitHub Actions · GHCR |
 | Déploiement | TrueNAS Scale (VM) · nginx reverse proxy |
 | Build | Maven 3.9 · npm |
+
+## Contribution
+
+Ce repo constitue un projet personnel d'entrainement à la conception, au design et à l'implémentation d'une application web de bank.
+
+Aucune contribution n'est attendue.
+
