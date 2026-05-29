@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -83,6 +84,42 @@ public class AccountService {
 
         account.setBalance(account.getBalance().add(amount));
         accountRepository.save(account);
+    }
+
+    /** Used by the IBAN-lookup endpoint — returns the raw entity to avoid over-exposure. */
+    public Optional<Account> findByIban(String iban) {
+        return accountRepository.findByIban(iban);
+    }
+
+    // ── Admin operations (no ownership check) ─────────────────────────────────
+
+    @Transactional
+    public AccountResponse adminDeposit(UUID accountId, BigDecimal amount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        if (account.getStatus() == Account.Status.CLOSED) {
+            throw new BusinessException("Cannot credit a closed account", HttpStatus.METHOD_NOT_ALLOWED);
+        }
+
+        account.setBalance(account.getBalance().add(amount));
+        return toResponse(accountRepository.save(account));
+    }
+
+    @Transactional
+    public AccountResponse adminWithdrawal(UUID accountId, BigDecimal amount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        if (account.getStatus() == Account.Status.CLOSED) {
+            throw new BusinessException("Cannot debit a closed account", HttpStatus.METHOD_NOT_ALLOWED);
+        }
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new BusinessException("Insufficient funds", HttpStatus.METHOD_NOT_ALLOWED);
+        }
+
+        account.setBalance(account.getBalance().subtract(amount));
+        return toResponse(accountRepository.save(account));
     }
 
     private AccountResponse toResponse(Account account) {

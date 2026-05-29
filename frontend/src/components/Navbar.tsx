@@ -1,14 +1,15 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { removeToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
-import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard } from 'lucide-react'
+import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from './Logo'
 
 const navLinks = [
-  { to: '/dashboard',    label: 'Tableau de bord', icon: LayoutDashboard },
-  { to: '/transfer',     label: 'Virement',         icon: ArrowLeftRight },
-  { to: '/accounts/new', label: 'Nouveau compte',   icon: PlusCircle },
+  { to: '/dashboard',       label: 'Tableau de bord', icon: LayoutDashboard },
+  { to: '/transfer',        label: 'Virement',         icon: ArrowLeftRight },
+  { to: '/beneficiaries',   label: 'Bénéficiaires',    icon: Users },
+  { to: '/accounts/new',    label: 'Nouveau compte',   icon: PlusCircle },
 ]
 
 export default function Navbar() {

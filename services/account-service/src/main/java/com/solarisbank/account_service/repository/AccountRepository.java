@@ -12,5 +12,6 @@ import java.util.UUID;
 public interface AccountRepository extends JpaRepository<Account, UUID> {
     List<Account> findByUserId(UUID userId);
     boolean existsByIban(String iban);
+    Optional<Account> findByIban(String iban);
     Optional<Account> findByAccountIdAndUserId(UUID id, UUID userId);
 }

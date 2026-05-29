@@ -1,17 +1,18 @@
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
-import type { Account } from '@/types'
+import type { Account, Beneficiary } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -27,42 +28,54 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeftRight, ArrowLeft, ArrowDown, Info, AlertTriangle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  ArrowLeftRight, ArrowLeft, ArrowDown,
+  Info, AlertTriangle, Users, CreditCard, Keyboard,
+  Loader2, CheckCircle2, XCircle,
+} from 'lucide-react'
+
+// ── Types & schema ─────────────────────────────────────────────────────────────
+
+type DestType = 'own' | 'beneficiary' | 'manual'
+
+const schema = z.object({
+  fromAccountId: z.string().uuid('Compte source requis'),
+  amount:        z.number({ message: 'Montant invalide' }).positive('Montant invalide'),
+  description:   z.string().max(255, 'Maximum 255 caractères').optional(),
+})
+type FormData = z.infer<typeof schema>
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount)
 }
 
-const schema = z.object({
-  fromAccountId: z.string().uuid('Compte source requis'),
-  toAccountId:   z.string().uuid('Compte destinataire requis'),
-  amount:        z.number({ message: 'Montant invalide' }).positive('Montant invalide'),
-  description:   z.string().max(255, 'Maximum 255 caractères').optional(),
-}).refine(d => d.fromAccountId !== d.toAccountId, {
-  message: 'Les comptes source et destinataire doivent être différents',
-  path: ['toAccountId'],
-})
-
-type FormData = z.infer<typeof schema>
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function TransferPage() {
-  const navigate = useNavigate()
-  const userId   = getUserIdFromToken()
+  const navigate       = useNavigate()
+  const [searchParams] = useSearchParams()
+  const userId         = getUserIdFromToken()
 
-  // ── Idempotency key ────────────────────────────────────────────────────────
-  // One UUID per form instance. Generated once when the page loads.
-  // • On SUCCESS  → regenerate (so the next transfer gets a fresh key)
-  // • On FAILURE  → keep the same key (retry is safe, server is idempotent)
+  // ── Idempotency key ──────────────────────────────────────────────────────
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
 
-  // ── Confirmation modal state ───────────────────────────────────────────────
-  // pendingTransfer holds validated form data while the modal is open.
-  // It is null when the modal is closed.
+  // ── Destination state ────────────────────────────────────────────────────
+  const [destType,       setDestType]       = useState<DestType>('own')
+  const [toAccountId,    setToAccountId]    = useState<string | null>(null)
+  const [destLabel,      setDestLabel]      = useState<string>('')   // display in modal
+  const [manualIban,     setManualIban]     = useState('')
+  const [ibanStatus,     setIbanStatus]     = useState<'idle'|'resolving'|'ok'|'error'>('idle')
+  const [ibanError,      setIbanError]      = useState('')
+  const [selectedBeneficiaryIban, setSelectedBeneficiaryIban] = useState<string>('')
+
+  // ── Modal ────────────────────────────────────────────────────────────────
   const [pendingTransfer, setPendingTransfer] = useState<FormData | null>(null)
   const [isSubmitting,    setIsSubmitting]    = useState(false)
 
-  // ── Data ───────────────────────────────────────────────────────────────────
+  // ── Queries ──────────────────────────────────────────────────────────────
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['accounts', userId],
     queryFn:  () => api
@@ -71,6 +84,26 @@ export default function TransferPage() {
     enabled: !!userId,
   })
 
+  const { data: beneficiaries = [] } = useQuery<Beneficiary[]>({
+    queryKey: ['beneficiaries', userId],
+    queryFn:  () => api.get<Beneficiary[]>('/api/v1/beneficiaries').then(r => r.data),
+    enabled:  !!userId,
+  })
+
+  // ── Pre-fill from /beneficiaries "Virer" button ──────────────────────────
+  useEffect(() => {
+    const iban = searchParams.get('iban')
+    const name = searchParams.get('name')
+    if (iban && name) {
+      setDestType('manual')
+      setManualIban(iban)
+      setDestLabel(name)
+      resolveIban(iban, name)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Form ──────────────────────────────────────────────────────────────────
   const { control, register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
@@ -78,46 +111,89 @@ export default function TransferPage() {
   const fromId      = watch('fromAccountId')
   const fromAccount = accounts.find(a => a.id === fromId)
 
-  // ── Step 1 : form submit → open confirmation modal ─────────────────────────
-  // Zod validation runs here via handleSubmit.
-  // If valid, we store the data and open the recap modal — NO API call yet.
+  // ── IBAN resolution ───────────────────────────────────────────────────────
+
+  async function resolveIban(iban: string, label?: string) {
+    const clean = iban.toUpperCase().replace(/\s/g, '')
+    if (clean.length < 8) return
+
+    setIbanStatus('resolving')
+    setIbanError('')
+    setToAccountId(null)
+
+    try {
+      const { data } = await api.get<{ accountId: string }>(`/api/v1/accounts/iban/${clean}`)
+      setToAccountId(data.accountId)
+      setDestLabel(label ?? clean)
+      setIbanStatus('ok')
+    } catch {
+      setIbanStatus('error')
+      setIbanError('IBAN introuvable dans notre système')
+      setToAccountId(null)
+    }
+  }
+
+  // ── Destination type switch ───────────────────────────────────────────────
+
+  function switchDestType(type: DestType) {
+    setDestType(type)
+    setToAccountId(null)
+    setIbanStatus('idle')
+    setIbanError('')
+    setManualIban('')
+    setSelectedBeneficiaryIban('')
+    setDestLabel('')
+  }
+
+  // ── Step 1: validate form → open modal ───────────────────────────────────
+
   function onRequestConfirm(data: FormData) {
+    if (!toAccountId) {
+      toast.error('Veuillez sélectionner un compte destinataire valide.')
+      return
+    }
+    if (data.fromAccountId === toAccountId) {
+      toast.error('Le compte source et le compte destinataire doivent être différents.')
+      return
+    }
     setPendingTransfer(data)
   }
 
-  // ── Step 2 : user clicks "Confirmer" in modal → API call ──────────────────
+  // ── Step 2: modal confirmed → API call ───────────────────────────────────
+
   async function onConfirm() {
-    if (!pendingTransfer) return
+    if (!pendingTransfer || !toAccountId) return
     setIsSubmitting(true)
     try {
-      await api.post('/api/v1/transactions/transfer', pendingTransfer, {
+      await api.post('/api/v1/transactions/transfer', {
+        fromAccountId: pendingTransfer.fromAccountId,
+        toAccountId,
+        amount:        pendingTransfer.amount,
+        description:   pendingTransfer.description,
+      }, {
         headers: {
           'X-User-Id':       userId,
-          // The idempotency key ties this exact transfer attempt to one DB row.
-          // If this request is replayed (network retry, double-click on mobile, etc.)
-          // the server will return the existing transaction instead of creating a new one.
           'Idempotency-Key': idempotencyKey,
         },
       })
       toast.success('Virement initié ! Traitement en cours.')
-      // SUCCESS → generate a new key so the NEXT transfer is independent
       setIdempotencyKey(crypto.randomUUID())
       navigate('/dashboard')
     } catch {
       toast.error('Le virement a échoué. Vérifiez votre solde.')
-      // FAILURE → keep the same key: if the first attempt actually went through
-      // silently (e.g. network timeout after server processed it), retrying with
-      // the same key is safe — the server won't create a second transaction.
     } finally {
       setIsSubmitting(false)
       setPendingTransfer(null)
     }
   }
 
-  // Short display of the destination UUID (e.g. "550e8400…6655")
-  const toAccountDisplay = pendingTransfer
-    ? `${pendingTransfer.toAccountId.slice(0, 8)}…${pendingTransfer.toAccountId.slice(-4)}`
-    : ''
+  // ── Destination tabs ──────────────────────────────────────────────────────
+
+  const destTabs: { type: DestType; label: string; icon: React.ElementType }[] = [
+    { type: 'own',         label: 'Mes comptes',    icon: CreditCard },
+    { type: 'beneficiary', label: 'Bénéficiaires',  icon: Users },
+    { type: 'manual',      label: 'IBAN manuel',    icon: Keyboard },
+  ]
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -130,10 +206,9 @@ export default function TransferPage() {
         <p className="mt-1 text-sm text-muted-foreground">Les virements sont traités de manière asynchrone.</p>
       </div>
 
-      {/* ── Transfer form ─────────────────────────────────────────────────── */}
       <form onSubmit={handleSubmit(onRequestConfirm)} className="space-y-5">
 
-        {/* From */}
+        {/* ── Source ──────────────────────────────────────────────────────── */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Compte source</Label>
           <Controller
@@ -167,26 +242,138 @@ export default function TransferPage() {
           {errors.fromAccountId && <p className="text-xs text-destructive">{errors.fromAccountId.message}</p>}
         </div>
 
-        {/* Visual arrow */}
+        {/* Arrow */}
         <div className="flex items-center justify-center">
           <div className="flex size-9 items-center justify-center rounded-full border bg-muted">
             <ArrowDown size={16} className="text-muted-foreground" />
           </div>
         </div>
 
-        {/* To */}
-        <div className="space-y-2">
-          <Label htmlFor="toAccountId" className="text-sm font-medium">Compte destinataire (UUID)</Label>
-          <Input
-            id="toAccountId"
-            {...register('toAccountId')}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            className="h-11 font-mono text-sm"
-          />
-          {errors.toAccountId && <p className="text-xs text-destructive">{errors.toAccountId.message}</p>}
+        {/* ── Destination type tabs ────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Destinataire</Label>
+
+          <div className="flex rounded-lg border bg-muted/30 p-1 gap-1">
+            {destTabs.map(({ type, label, icon: Icon }) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => switchDestType(type)}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
+                  destType === type
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Own accounts ────────────────────────────────────────────── */}
+          {destType === 'own' && (
+            <Select
+              value={toAccountId ?? ''}
+              onValueChange={id => {
+                setToAccountId(id)
+                const acc = accounts.find(a => a.id === id)
+                setDestLabel(acc ? `${acc.type === 'CHECKING' ? 'Courant' : 'Épargne'} ···· ${acc.iban.slice(-4)}` : id)
+              }}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Choisissez un compte…" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.id}>
+                    <div className="flex items-center justify-between gap-6">
+                      <span className="text-sm">{a.type === 'CHECKING' ? 'Courant' : 'Épargne'}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{a.iban.slice(-8)}</span>
+                      <span className="font-semibold tabular-nums">{formatAmount(a.balance, a.currency)}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* ── Beneficiaries ────────────────────────────────────────────── */}
+          {destType === 'beneficiary' && (
+            <>
+              {beneficiaries.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="flex items-center justify-between py-3 px-4">
+                    <p className="text-sm text-muted-foreground">Aucun bénéficiaire enregistré.</p>
+                    <Button size="sm" variant="outline" asChild className="gap-1.5 text-xs">
+                      <Link to="/beneficiaries">Ajouter</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Select
+                  value={selectedBeneficiaryIban}
+                  onValueChange={iban => {
+                    setSelectedBeneficiaryIban(iban)
+                    const b = beneficiaries.find(b => b.iban === iban)
+                    resolveIban(iban, b?.name)
+                  }}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Choisissez un bénéficiaire…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {beneficiaries.map(b => (
+                      <SelectItem key={b.id} value={b.iban}>
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{b.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {b.iban.slice(0, 4)} ···· {b.iban.slice(-4)}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <IbanStatusBadge status={ibanStatus} error={ibanError} />
+            </>
+          )}
+
+          {/* ── Manual IBAN ──────────────────────────────────────────────── */}
+          {destType === 'manual' && (
+            <>
+              <div className="flex gap-2">
+                <Input
+                  value={manualIban}
+                  onChange={e => {
+                    setManualIban(e.target.value)
+                    setIbanStatus('idle')
+                    setToAccountId(null)
+                  }}
+                  onBlur={() => manualIban.trim() && resolveIban(manualIban)}
+                  placeholder="FR76 3000 6000 0112 3456 7890 189"
+                  className="h-11 font-mono text-sm uppercase"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 shrink-0"
+                  onClick={() => resolveIban(manualIban)}
+                  disabled={ibanStatus === 'resolving' || !manualIban.trim()}
+                >
+                  {ibanStatus === 'resolving'
+                    ? <Loader2 size={15} className="animate-spin" />
+                    : 'Vérifier'}
+                </Button>
+              </div>
+              <IbanStatusBadge status={ibanStatus} error={ibanError} />
+            </>
+          )}
         </div>
 
-        {/* Amount */}
+        {/* ── Amount ──────────────────────────────────────────────────────── */}
         <div className="space-y-2">
           <Label htmlFor="amount" className="text-sm font-medium">Montant</Label>
           <div className="relative">
@@ -206,7 +393,7 @@ export default function TransferPage() {
           {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
         </div>
 
-        {/* Description (optional) */}
+        {/* ── Description ─────────────────────────────────────────────────── */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="description" className="text-sm font-medium">Description</Label>
@@ -222,7 +409,7 @@ export default function TransferPage() {
           {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
         </div>
 
-        {/* Info notice */}
+        {/* ── Info ────────────────────────────────────────────────────────── */}
         <Card className="border-muted bg-muted/40">
           <CardContent className="flex items-start gap-2.5 py-3 px-4">
             <Info size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -232,17 +419,20 @@ export default function TransferPage() {
           </CardContent>
         </Card>
 
-        {/* Submit opens the modal — does NOT send any request */}
-        <Button type="submit" className="h-11 w-full gap-2 text-sm font-medium">
+        <Button
+          type="submit"
+          className="h-11 w-full gap-2 text-sm font-medium"
+          disabled={!toAccountId}
+        >
           <ArrowLeftRight size={15} />
           Vérifier et confirmer
         </Button>
       </form>
 
-      {/* ── Confirmation modal ────────────────────────────────────────────── */}
+      {/* ── Confirmation modal ─────────────────────────────────────────────── */}
       <Dialog
         open={!!pendingTransfer}
-        onOpenChange={open => { if (!open && !isSubmitting) setPendingTransfer(null) }}
+        onOpenChange={o => { if (!o && !isSubmitting) setPendingTransfer(null) }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -257,7 +447,7 @@ export default function TransferPage() {
 
           {pendingTransfer && (
             <div className="space-y-3 py-1">
-              {/* From account */}
+              {/* Source */}
               <div className="rounded-lg border bg-muted/40 px-4 py-3">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Depuis</p>
                 {fromAccount ? (
@@ -274,13 +464,13 @@ export default function TransferPage() {
                 )}
               </div>
 
-              {/* To account */}
+              {/* Destination */}
               <div className="rounded-lg border bg-muted/40 px-4 py-3">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vers</p>
-                <p className="font-mono text-sm">{toAccountDisplay}</p>
+                <p className="text-sm font-medium">{destLabel || toAccountId}</p>
               </div>
 
-              {/* Amount — visually prominent */}
+              {/* Amount */}
               <div className="rounded-lg border-2 border-primary/20 bg-primary/5 px-4 py-3 text-center">
                 <p className="mb-0.5 text-xs font-medium text-muted-foreground">Montant</p>
                 <p className="text-2xl font-bold tabular-nums text-primary">
@@ -288,7 +478,7 @@ export default function TransferPage() {
                 </p>
               </div>
 
-              {/* Description — only shown if provided */}
+              {/* Description */}
               {pendingTransfer.description && (
                 <div className="rounded-lg border bg-muted/40 px-4 py-3">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Description</p>
@@ -296,11 +486,11 @@ export default function TransferPage() {
                 </div>
               )}
 
-              {/* Irreversibility warning */}
+              {/* Warning */}
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
                 <p className="text-xs leading-relaxed text-amber-700">
-                  Cette opération est <strong>irréversible</strong>. Vérifiez le compte destinataire avant de confirmer.
+                  Cette opération est <strong>irréversible</strong>. Vérifiez le destinataire avant de confirmer.
                 </p>
               </div>
             </div>
@@ -315,17 +505,40 @@ export default function TransferPage() {
             >
               Annuler
             </Button>
-            <Button
-              onClick={onConfirm}
-              disabled={isSubmitting}
-              className="flex-1 gap-2"
-            >
+            <Button onClick={onConfirm} disabled={isSubmitting} className="flex-1 gap-2">
               <ArrowLeftRight size={14} />
-              {isSubmitting ? 'Envoi en cours…' : 'Confirmer'}
+              {isSubmitting ? 'Envoi…' : 'Confirmer'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   )
+}
+
+// ── Status badge for IBAN resolution ──────────────────────────────────────────
+
+function IbanStatusBadge({ status, error }: { status: string; error: string }) {
+  if (status === 'resolving') {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 size={11} className="animate-spin" /> Vérification en cours…
+      </p>
+    )
+  }
+  if (status === 'ok') {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+        <CheckCircle2 size={12} /> IBAN valide — compte trouvé
+      </p>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-destructive">
+        <XCircle size={12} /> {error}
+      </p>
+    )
+  }
+  return null
 }

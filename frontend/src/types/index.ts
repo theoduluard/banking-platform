@@ -75,6 +75,28 @@ export interface Page<T> {
   last: boolean
 }
 
+// ── Beneficiary ───────────────────────────────────────────────────────────────
+
+export interface Beneficiary {
+  id: string
+  name: string
+  iban: string
+  createdAt: string
+}
+
+export interface BeneficiaryRequest {
+  name: string
+  iban: string
+}
+
+// ── Admin Operations ──────────────────────────────────────────────────────────
+
+export interface AdminOperationRequest {
+  accountId: string
+  amount: number
+  description?: string
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 export type UserRole = 'CLIENT' | 'ADMIN'

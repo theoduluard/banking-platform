@@ -14,10 +14,12 @@ on:
 #   NAS_SSH_KEY      – Private SSH key (PEM / OpenSSH format)
 #   NAS_PORT         – SSH port (default 22)
 #   NAS_DEPLOY_PATH  – Absolute path on the NAS where docker-compose.prod.yml lives
-#   GHCR_TOKEN       – GitHub PAT with read:packages scope (for NAS to pull images)
-#   ADMIN_EMAIL      – Bootstrap admin account email
-#   ADMIN_PASSWORD   – Bootstrap admin account password (strong)
-#   GRAFANA_PASSWORD – Grafana admin password (optional — defaults to "admin" if not set)
+#   GHCR_TOKEN          – GitHub PAT with read:packages scope (for NAS to pull images)
+#   ADMIN_EMAIL         – Bootstrap admin account email
+#   ADMIN_PASSWORD      – Bootstrap admin account password (strong)
+#   GRAFANA_PASSWORD    – Grafana admin password (optional — defaults to "admin" if not set)
+#   GRAFANA_PUBLIC_URL  – Full public URL of Grafana, e.g. http://my-nas.duckdns.org:3000
+#                         Used as the sidebar link in the admin UI and as GF_SERVER_ROOT_URL.
 
 env:
   REGISTRY: ghcr.io
@@ -91,6 +93,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # VITE_GRAFANA_URL is only consumed by the frontend Dockerfile (ARG).
+          # Passing it for all services is harmless — others simply ignore it.
+          build-args: |
+            VITE_GRAFANA_URL=${{ secrets.GRAFANA_PUBLIC_URL }}
           cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache
           cache-to:   type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache,mode=max
 
@@ -127,7 +133,7 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD
+          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL
           script: |
             set -e
 
@@ -143,6 +149,7 @@ jobs:
             done
             ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
             GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}" \
+            GRAFANA_PUBLIC_URL="${GRAFANA_PUBLIC_URL:-http://localhost:3000}" \
               docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             # Remove dangling images to save disk space
@@ -150,8 +157,9 @@ jobs:
 
             echo "Deployment complete."
         env:
-          GHCR_TOKEN:        ${{ secrets.GHCR_TOKEN }}
-          REPO_OWNER:        ${{ github.repository_owner }}
-          ADMIN_EMAIL:       ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD:    ${{ secrets.ADMIN_PASSWORD }}
-          GRAFANA_PASSWORD:  ${{ secrets.GRAFANA_PASSWORD }}
+          GHCR_TOKEN:           ${{ secrets.GHCR_TOKEN }}
+          REPO_OWNER:           ${{ github.repository_owner }}
+          ADMIN_EMAIL:          ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD:       ${{ secrets.ADMIN_PASSWORD }}
+          GRAFANA_PASSWORD:     ${{ secrets.GRAFANA_PASSWORD }}
+          GRAFANA_PUBLIC_URL:   ${{ secrets.GRAFANA_PUBLIC_URL }}

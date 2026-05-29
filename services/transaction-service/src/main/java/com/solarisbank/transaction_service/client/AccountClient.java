@@ -1,7 +1,10 @@
 package com.solarisbank.transaction_service.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solarisbank.transaction_service.client.dto.AccountResponse;
+import com.solarisbank.transaction_service.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -14,9 +17,26 @@ public class AccountClient {
 
     private final RestClient restClient;
 
-    public AccountClient(@Value("${account.service.url}") String accountServiceUrl) {
+    public AccountClient(
+            @Value("${account.service.url}") String accountServiceUrl,
+            ObjectMapper objectMapper) {
         this.restClient = RestClient.builder()
                 .baseUrl(accountServiceUrl)
+                // Convert 4xx/5xx responses from account-service into BusinessException
+                // so they propagate cleanly through the transaction-service error handlers.
+                .defaultStatusHandler(
+                    status -> status.is4xxClientError() || status.is5xxServerError(),
+                    (req, res) -> {
+                        String msg = "Account service error";
+                        try {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> body = objectMapper.readValue(
+                                    res.getBody().readAllBytes(), Map.class);
+                            if (body.containsKey("error")) msg = (String) body.get("error");
+                        } catch (Exception ignored) {}
+                        throw new BusinessException(msg, HttpStatus.valueOf(res.getStatusCode().value()));
+                    }
+                )
                 .build();
     }
 
@@ -40,6 +60,26 @@ public class AccountClient {
     public void credit(UUID accountId, BigDecimal amount) {
         restClient.post()
                 .uri("/api/v1/accounts/{id}/credit", accountId)
+                .body(Map.of("amount", amount))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    // ── Admin operations (bypass user ownership check) ────────────────────────
+
+    public void adminDeposit(UUID accountId, BigDecimal amount) {
+        restClient.post()
+                .uri("/api/v1/admin/accounts/{id}/deposit", accountId)
+                .header("X-User-Role", "ADMIN")
+                .body(Map.of("amount", amount))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    public void adminWithdrawal(UUID accountId, BigDecimal amount) {
+        restClient.post()
+                .uri("/api/v1/admin/accounts/{id}/withdrawal", accountId)
+                .header("X-User-Role", "ADMIN")
                 .body(Map.of("amount", amount))
                 .retrieve()
                 .toBodilessEntity();

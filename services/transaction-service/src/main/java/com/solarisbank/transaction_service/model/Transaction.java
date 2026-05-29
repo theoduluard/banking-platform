@@ -65,9 +65,9 @@ public class Transaction {
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = LocalDateTime.now();
-        this.status = Status.PENDING;
-        this.currency = "EUR";
-        this.type = Type.TRANSFER;
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+        if (this.status   == null) this.status   = Status.PENDING;
+        if (this.currency == null) this.currency = "EUR";
+        if (this.type     == null) this.type     = Type.TRANSFER;
     }
 }

@@ -1,9 +1,12 @@
 package com.solarisbank.account_service.controller;
 
 import com.solarisbank.account_service.dto.AccountResponse;
+import com.solarisbank.account_service.dto.CreditRequest;
 import com.solarisbank.account_service.exception.BusinessException;
 import com.solarisbank.account_service.model.Account;
 import com.solarisbank.account_service.repository.AccountRepository;
+import com.solarisbank.account_service.service.AccountService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminAccountController {
 
     private final AccountRepository accountRepository;
+    private final AccountService accountService;
 
     @GetMapping
     public ResponseEntity<Page<AccountResponse>> getAllAccounts(
@@ -54,6 +58,26 @@ public class AdminAccountController {
         accountRepository.save(account);
 
         return ResponseEntity.ok(toResponse(account));
+    }
+
+    @PostMapping("/{id}/deposit")
+    public ResponseEntity<AccountResponse> adminDeposit(
+            @PathVariable java.util.UUID id,
+            @Valid @RequestBody CreditRequest request,
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.adminDeposit(id, request.getAmount()));
+    }
+
+    @PostMapping("/{id}/withdrawal")
+    public ResponseEntity<AccountResponse> adminWithdrawal(
+            @PathVariable java.util.UUID id,
+            @Valid @RequestBody CreditRequest request,
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.adminWithdrawal(id, request.getAmount()));
     }
 
     private void requireAdmin(String role) {

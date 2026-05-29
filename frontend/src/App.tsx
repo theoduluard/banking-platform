@@ -12,7 +12,8 @@ import RegisterPage      from '@/pages/RegisterPage'
 import DashboardPage     from '@/pages/DashboardPage'
 import AccountDetailPage from '@/pages/AccountDetailPage'
 import NewAccountPage    from '@/pages/NewAccountPage'
-import TransferPage      from '@/pages/TransferPage'
+import TransferPage       from '@/pages/TransferPage'
+import BeneficiariesPage  from '@/pages/BeneficiariesPage'
 
 import AdminDashboardPage    from '@/pages/admin/AdminDashboardPage'
 import AdminUsersPage        from '@/pages/admin/AdminUsersPage'
@@ -42,7 +43,8 @@ export default function App() {
             <Route path="/dashboard"    element={<DashboardPage />} />
             <Route path="/accounts/new" element={<NewAccountPage />} />
             <Route path="/accounts/:id" element={<AccountDetailPage />} />
-            <Route path="/transfer"     element={<TransferPage />} />
+            <Route path="/transfer"       element={<TransferPage />} />
+            <Route path="/beneficiaries" element={<BeneficiariesPage />} />
           </Route>
 
           {/* Admin — ADMIN role required, own sidebar layout */}

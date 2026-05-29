@@ -6,6 +6,12 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+# Vite embeds env variables at build time — pass the public Grafana URL so the
+# admin sidebar link points to the right host instead of localhost.
+ARG VITE_GRAFANA_URL=http://localhost:3000
+ENV VITE_GRAFANA_URL=$VITE_GRAFANA_URL
+
 RUN npm run build
 
 # ─── Stage 2: Serve ──────────────────────────────────────────────────────────

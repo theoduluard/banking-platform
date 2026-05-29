@@ -41,6 +41,13 @@ public class ProxyController {
         return forward(request, body, accountServiceUrl);
     }
 
+    @RequestMapping("/api/v1/beneficiaries/**")
+    public ResponseEntity<byte[]> proxyBeneficiaries(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, accountServiceUrl);
+    }
+
     @RequestMapping("/api/v1/transactions/**")
     public ResponseEntity<byte[]> proxyTransactions(
             HttpServletRequest request,

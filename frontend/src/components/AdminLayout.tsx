@@ -79,7 +79,7 @@ export default function AdminLayout() {
             Outils
           </p>
           <a
-            href="http://localhost:3000"
+            href={import.meta.env.VITE_GRAFANA_URL ?? 'http://localhost:3000'}
             target="_blank"
             rel="noopener noreferrer"
             className={cn(

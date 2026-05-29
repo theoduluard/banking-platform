@@ -2,6 +2,7 @@ package com.solarisbank.transaction_service.service;
 
 import com.solarisbank.transaction_service.client.AccountClient;
 import com.solarisbank.transaction_service.client.dto.AccountResponse;
+import com.solarisbank.transaction_service.dto.AdminOperationRequest;
 import com.solarisbank.transaction_service.dto.TransactionResponse;
 import com.solarisbank.transaction_service.dto.TransferRequest;
 import com.solarisbank.transaction_service.exception.BusinessException;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -101,6 +103,60 @@ public class TransactionService {
         }
 
         return toResponse(transaction);
+    }
+
+    // ── Admin operations ──────────────────────────────────────────────────────
+
+    /** Sentinel UUID representing the bank/system account (no real account behind it). */
+    private static final UUID SYSTEM_ACCOUNT_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+    /**
+     * Admin deposit: credit the target account and record a DEPOSIT transaction.
+     * Synchronous — no Kafka saga. The balance is updated immediately.
+     */
+    public TransactionResponse adminDeposit(UUID adminId, AdminOperationRequest request) {
+        // Adjust balance first — throws BusinessException on any account-service error.
+        accountClient.adminDeposit(request.getAccountId(), request.getAmount());
+
+        // Save completed audit record.
+        Transaction tx = transactionRepository.save(Transaction.builder()
+                .fromAccountId(SYSTEM_ACCOUNT_ID)
+                .toAccountId(request.getAccountId())
+                .initiatedByUserId(adminId)
+                .amount(request.getAmount())
+                .description(request.getDescription())
+                .type(Transaction.Type.DEPOSIT)
+                .status(Transaction.Status.COMPLETED)
+                .completedAt(LocalDateTime.now())
+                .build());
+
+        log.info("[Admin] Deposit {} EUR on account {} by admin {}",
+                request.getAmount(), request.getAccountId(), adminId);
+        return toResponse(tx);
+    }
+
+    /**
+     * Admin withdrawal: debit the target account and record a WITHDRAWAL transaction.
+     * Synchronous — no Kafka saga. The balance is updated immediately.
+     */
+    public TransactionResponse adminWithdrawal(UUID adminId, AdminOperationRequest request) {
+        accountClient.adminWithdrawal(request.getAccountId(), request.getAmount());
+
+        Transaction tx = transactionRepository.save(Transaction.builder()
+                .fromAccountId(request.getAccountId())
+                .toAccountId(SYSTEM_ACCOUNT_ID)
+                .initiatedByUserId(adminId)
+                .amount(request.getAmount())
+                .description(request.getDescription())
+                .type(Transaction.Type.WITHDRAWAL)
+                .status(Transaction.Status.COMPLETED)
+                .completedAt(LocalDateTime.now())
+                .build());
+
+        log.info("[Admin] Withdrawal {} EUR from account {} by admin {}",
+                request.getAmount(), request.getAccountId(), adminId);
+        return toResponse(tx);
     }
 
     private TransactionResponse toResponse(Transaction t) {

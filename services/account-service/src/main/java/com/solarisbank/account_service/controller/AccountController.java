@@ -57,6 +57,18 @@ public class AccountController {
         return ResponseEntity.ok(accountService.updateStatus(id, userId, status));
     }
 
+    /**
+     * Resolves an IBAN to an account ID.
+     * Used by the frontend to look up the destination account before a transfer.
+     * Only returns the account ID — no balance, no status (privacy).
+     */
+    @GetMapping("/iban/{iban}")
+    public ResponseEntity<Map<String, String>> getByIban(@PathVariable String iban) {
+        return accountService.findByIban(iban)
+                .map(acc -> ResponseEntity.ok(Map.of("accountId", acc.getAccountId().toString())))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/{id}/debit")
     public ResponseEntity<Void> debit(
             @PathVariable UUID id,
