@@ -1,12 +1,10 @@
 package com.solarisbank.auth_service.config;
 
-import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.repository.UserRepository;
 import com.solarisbank.auth_service.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -51,8 +49,13 @@ public class SecurityConfig {
                         .username(user.getEmail())
                         .password(user.getPassword())
                         .roles(user.getRole().name())
+                        // Respect the isActive flag — blocked accounts can't log in
+                        .disabled(!Boolean.TRUE.equals(user.getIsActive()))
                         .build())
-                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+                // Spring Security requires UsernameNotFoundException (not BusinessException)
+                // so DaoAuthenticationProvider can handle it cleanly as BadCredentialsException
+                .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+                        "User not found: " + email));
     }
 
     @Bean

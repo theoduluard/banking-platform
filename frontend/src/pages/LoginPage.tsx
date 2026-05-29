@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { ShieldCheck, TrendingUp, Zap } from 'lucide-react'
 import axios from 'axios'
 import api from '@/lib/api'
-import { setToken } from '@/lib/auth'
+import { setToken, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,7 +35,8 @@ export default function LoginPage() {
     try {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
-      navigate('/dashboard')
+      // Redirect admins to their panel, regular users to dashboard
+      navigate(getUserRoleFromToken() === 'ADMIN' ? '/admin' : '/dashboard')
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status

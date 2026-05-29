@@ -3,6 +3,8 @@ package com.solarisbank.auth_service.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -37,6 +39,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                 "status", 400,
                 "error", "Malformed or missing request body",
+                "timestamp", LocalDateTime.now().toString()
+        ));
+    }
+
+    // Identifiants incorrects ou compte inexistant → 401
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
+        String message = ex instanceof DisabledException
+                ? "Compte désactivé"
+                : "Identifiants incorrects";
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                "status", 401,
+                "error", message,
                 "timestamp", LocalDateTime.now().toString()
         ));
     }

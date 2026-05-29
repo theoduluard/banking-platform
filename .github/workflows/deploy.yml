@@ -131,9 +131,13 @@ jobs:
             # Authenticate to GHCR so private images can be pulled
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$REPO_OWNER" --password-stdin
 
-            # Pull latest images and restart services
+            # Pull latest images (retry up to 3 times for transient GHCR errors)
             cd "${{ secrets.NAS_DEPLOY_PATH }}"
-            docker compose -f docker-compose.prod.yml pull
+            for i in 1 2 3; do
+              docker compose -f docker-compose.prod.yml pull && break
+              echo "Pull attempt $i failed, retrying in 15s…"
+              sleep 15
+            done
             ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
               docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
