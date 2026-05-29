@@ -2,6 +2,7 @@ package com.solarisbank.auth_service.controller;
 
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
+import com.solarisbank.auth_service.dto.RefreshRequest;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.service.AuthService;
@@ -36,5 +37,14 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    /**
+     * Issues a new access + refresh token pair from a valid refresh token.
+     * The old refresh token is implicitly replaced — rotating strategy.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        return ResponseEntity.ok(authService.refresh(request.getRefreshToken()));
     }
 }

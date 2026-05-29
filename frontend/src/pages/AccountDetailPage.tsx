@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
@@ -8,8 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight, Clock, CreditCard, PiggyBank } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight, Clock, CreditCard, PiggyBank, RefreshCw } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount)
@@ -52,6 +52,9 @@ function TransactionRow({ tx, accountId }: { tx: Transaction; accountId: string 
             ? (isDebit ? 'Virement émis' : 'Virement reçu')
             : tx.type}
         </p>
+        {tx.description && (
+          <p className="truncate text-xs text-muted-foreground/80 italic">{tx.description}</p>
+        )}
         <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
       </div>
 
@@ -68,8 +71,9 @@ function TransactionRow({ tx, accountId }: { tx: Transaction; accountId: string 
 }
 
 export default function AccountDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const userId  = getUserIdFromToken()
+  const { id }      = useParams<{ id: string }>()
+  const userId      = getUserIdFromToken()
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
 
   const { data: account, isLoading: loadingAccount } = useQuery<Account>({
@@ -84,13 +88,33 @@ export default function AccountDetailPage() {
     enabled: !!id && !!userId,
   })
 
-  const { data: txPage, isLoading: loadingTx } = useQuery<Page<Transaction>>({
+  const { data: txPage, isLoading: loadingTx, isFetching: fetchingTx } = useQuery<Page<Transaction>>({
     queryKey: ['transactions', id, page],
     queryFn:  () => api
       .get<Page<Transaction>>(`/api/v1/transactions?accountId=${id}&page=${page}&size=10`)
       .then(r => r.data),
     enabled: !!id,
+    // Poll every 3 s while at least one transaction is still PENDING.
+    // The callback receives the latest query state so the interval is
+    // re-evaluated after every fetch — it automatically stops when all
+    // transactions have settled (COMPLETED / FAILED).
+    refetchInterval: (query) => {
+      const hasPending = query.state.data?.content.some(
+        tx => tx.status === 'PENDING',
+      ) ?? false
+      return hasPending ? 3000 : false
+    },
   })
+
+  // When the last PENDING transaction settles, also refresh the account
+  // balance so the displayed figure reflects the debit/credit immediately.
+  const hasPending = txPage?.content.some(tx => tx.status === 'PENDING') ?? false
+  useEffect(() => {
+    if (!txPage || hasPending) return
+    queryClient.invalidateQueries({ queryKey: ['account', id] })
+    queryClient.invalidateQueries({ queryKey: ['accounts', userId] })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txPage])
 
   const isChecking = account?.type === 'CHECKING'
 
@@ -148,7 +172,16 @@ export default function AccountDetailPage() {
       {/* Transactions */}
       <Card>
         <CardHeader className="border-b pb-4">
-          <CardTitle className="text-sm font-semibold">Historique des transactions</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold">Historique des transactions</CardTitle>
+            {/* Pulse indicator: visible while polling for PENDING updates */}
+            {hasPending && (
+              <span className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600">
+                <RefreshCw size={11} className={fetchingTx ? 'animate-spin' : 'animate-pulse'} />
+                Mise à jour en cours…
+              </span>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {loadingTx && (

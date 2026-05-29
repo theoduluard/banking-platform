@@ -14,8 +14,11 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -47,6 +50,41 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
 
+        return buildLoginResponse(user);
+    }
+
+    /**
+     * Rotating refresh token — validates the incoming refresh token, then issues
+     * a brand-new access + refresh pair.  The old refresh token is implicitly
+     * invalidated because the client replaces it with the new one.
+     */
+    public LoginResponse refresh(String refreshToken) {
+        String email;
+        try {
+            email = jwtService.extractEmail(refreshToken);
+        } catch (Exception e) {
+            log.warn("[Refresh] Malformed token — {}", e.getMessage());
+            throw new BusinessException("Invalid refresh token", HttpStatus.UNAUTHORIZED);
+        }
+
+        if (!jwtService.isTokenValid(refreshToken, email)) {
+            throw new BusinessException("Refresh token expired or invalid", HttpStatus.UNAUTHORIZED);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.UNAUTHORIZED));
+
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            throw new BusinessException("Account is disabled", HttpStatus.UNAUTHORIZED);
+        }
+
+        log.info("[Refresh] Issuing new token pair for user={}", email);
+        return buildLoginResponse(user);
+    }
+
+    // ── shared helper ──────────────────────────────────────────────────────────
+
+    private LoginResponse buildLoginResponse(User user) {
         return LoginResponse.builder()
                 .accessToken(jwtService.generateAccessToken(
                         user.getEmail(),

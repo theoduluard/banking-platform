@@ -1,3 +1,5 @@
+// ── Access token ─────────────────────────────────────────────────────────────
+
 export function getToken(): string | null {
   return localStorage.getItem('token')
 }
@@ -6,8 +8,25 @@ export function setToken(token: string): void {
   localStorage.setItem('token', token)
 }
 
+// ── Refresh token ─────────────────────────────────────────────────────────────
+
+export function getRefreshToken(): string | null {
+  return localStorage.getItem('refreshToken')
+}
+
+export function setRefreshToken(token: string): void {
+  localStorage.setItem('refreshToken', token)
+}
+
+export function removeRefreshToken(): void {
+  localStorage.removeItem('refreshToken')
+}
+
+// ── Shared logout helper — clears both tokens ─────────────────────────────────
+
 export function removeToken(): void {
   localStorage.removeItem('token')
+  localStorage.removeItem('refreshToken')
 }
 
 export function isAuthenticated(): boolean {

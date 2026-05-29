@@ -27,6 +27,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeftRight, ArrowLeft, ArrowDown, Info, AlertTriangle } from 'lucide-react'
 
 function formatAmount(amount: number, currency: string) {
@@ -37,6 +38,7 @@ const schema = z.object({
   fromAccountId: z.string().uuid('Compte source requis'),
   toAccountId:   z.string().uuid('Compte destinataire requis'),
   amount:        z.number({ message: 'Montant invalide' }).positive('Montant invalide'),
+  description:   z.string().max(255, 'Maximum 255 caractères').optional(),
 }).refine(d => d.fromAccountId !== d.toAccountId, {
   message: 'Les comptes source et destinataire doivent être différents',
   path: ['toAccountId'],
@@ -204,6 +206,22 @@ export default function TransferPage() {
           {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
         </div>
 
+        {/* Description (optional) */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+            <span className="text-xs text-muted-foreground">Optionnel</span>
+          </div>
+          <Textarea
+            id="description"
+            {...register('description')}
+            placeholder="Remboursement dîner, loyer juillet…"
+            rows={2}
+            className="resize-none text-sm"
+          />
+          {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
+        </div>
+
         {/* Info notice */}
         <Card className="border-muted bg-muted/40">
           <CardContent className="flex items-start gap-2.5 py-3 px-4">
@@ -269,6 +287,14 @@ export default function TransferPage() {
                   {formatAmount(pendingTransfer.amount, 'EUR')}
                 </p>
               </div>
+
+              {/* Description — only shown if provided */}
+              {pendingTransfer.description && (
+                <div className="rounded-lg border bg-muted/40 px-4 py-3">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Description</p>
+                  <p className="text-sm">{pendingTransfer.description}</p>
+                </div>
+              )}
 
               {/* Irreversibility warning */}
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">

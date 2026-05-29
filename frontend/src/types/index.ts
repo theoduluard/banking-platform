@@ -14,6 +14,11 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   accessToken: string
+  refreshToken: string
+  email: string
+  firstname: string
+  lastname: string
+  role: string
 }
 
 // ── Account ───────────────────────────────────────────────────────────────────
@@ -49,6 +54,7 @@ export interface Transaction {
   currency: string
   type: TransactionType
   status: TransactionStatus
+  description?: string | null
   createdAt: string
 }
 
@@ -56,6 +62,7 @@ export interface TransferRequest {
   fromAccountId: string
   toAccountId: string
   amount: number
+  description?: string
 }
 
 export interface Page<T> {
