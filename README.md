@@ -104,7 +104,8 @@ sequenceDiagram
     participant ACC as account-service
 
     U->>FE: Confirme le virement (modale)
-    FE->>GW: POST /api/v1/transactions/transfer<br/>Idempotency-Key: &lt;uuid&gt;
+    FE->>GW: POST /api/v1/transactions/transfer
+    Note over FE,GW: Header: Idempotency-Key: uuid
     GW->>GW: Valide JWT · injecte X-User-Id
     GW->>TX: Forward
 
