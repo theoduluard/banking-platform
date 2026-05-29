@@ -26,6 +26,7 @@ Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et 
 - [API Reference](#api-reference)
 - [Structure du projet](#structure-du-projet)
 - [Stack technique](#stack-technique)
+- [Vérification email](#vérification-email)
 
 ---
 
@@ -145,6 +146,15 @@ sequenceDiagram
 | **Identité** | JWT signé HMAC-SHA256, durée 24h |
 | **Mots de passe** | BCrypt (coût par défaut) |
 | **Rôles** | `CLIENT` / `ADMIN` — claim `role` dans le JWT |
+| **Email** | Vérification obligatoire à l'inscription (token UUID, expiration 24h) |
+
+### Vérification d'email
+
+À chaque inscription, un email de vérification est envoyé via SMTP (Brevo en prod). Le compte reste **inaccessible tant que l'email n'est pas confirmé**.
+
+- **Compatibilité ascendante** : les comptes créés avant l'introduction de cette feature (`emailVerified = NULL`) sont considérés comme vérifiés.
+- **Token expiré** : le frontend propose de renvoyer un nouveau lien (le token précédent est invalidé).
+- **En développement** : si le SMTP n'est pas configuré, l'URL de vérification est simplement loguée dans la console — aucune exception n'est levée.
 
 ### Protection des routes admin (3 couches)
 
@@ -176,8 +186,9 @@ Routes publiques (sans JWT) : `POST /api/v1/auth/login`, `POST /api/v1/auth/regi
 
 ### auth-service — `:8081`
 - Inscription avec validation stricte du mot de passe (maj, min, chiffre, caractère spécial)
+- **Vérification email** : token UUID envoyé par email (Brevo SMTP), expiration 24h — la connexion est bloquée tant que l'email n'est pas confirmé
 - Login → access token JWT (24h) + refresh token (7j)
-- `DataInitializer` : seede le compte admin au démarrage depuis `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+- `DataInitializer` : seede le compte admin au démarrage depuis `ADMIN_EMAIL` / `ADMIN_PASSWORD` (admin pré-vérifié, sans envoi d'email)
 - Endpoints admin : liste des utilisateurs, activation / désactivation
 
 ### account-service — `:8082`
@@ -225,6 +236,12 @@ admin.password=TonMotDePasse123!
 ```
 Puis redémarre `auth-service`. Supprime ces lignes ensuite (ne pas committer).
 
+**Vérification email en local** : si `SMTP_USERNAME` / `SMTP_PASSWORD` ne sont pas définis, l'envoi d'email échoue silencieusement et l'URL de vérification est loguée directement dans la console de `auth-service` :
+```
+[EmailService] SMTP not configured — verification URL: http://localhost:5173/verify-email?token=<uuid>
+```
+Colle l'URL dans ton navigateur pour vérifier le compte sans SMTP.
+
 ### Production (Docker Compose)
 
 Les images sont construites et poussées vers GHCR par GitHub Actions à chaque push sur `main`.
@@ -238,6 +255,16 @@ JWT_EXPIRATION=86400000
 JWT_REFRESH_EXPIRATION=604800000
 ADMIN_EMAIL=admin@solaris.bank
 ADMIN_PASSWORD=<mot_de_passe_fort>
+
+# SMTP (Brevo recommandé)
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=<ton_email_brevo>
+SMTP_PASSWORD=<clé_smtp_brevo>
+SMTP_FROM=noreply@solaris-bank.fr
+
+# URL publique du frontend (utilisée dans les liens des emails)
+FRONTEND_URL=https://ton-domaine.fr
 EOF
 
 # Démarrer la stack
@@ -256,15 +283,26 @@ Les routes protégées nécessitent `Authorization: Bearer <token>`.
 ### Auth
 
 ```bash
-# Inscription
+# Inscription — envoie un email de vérification
 POST /api/v1/auth/register
 { "firstname": "Jean", "lastname": "Dupont", "email": "jean@solaris.com", "password": "Pass@123" }
 # → 201 { "message": "Account created successfully", "userId": "uuid..." }
 
-# Connexion
+# Connexion (403 si email non vérifié)
 POST /api/v1/auth/login
 { "email": "jean@solaris.com", "password": "Pass@123" }
 # → 200 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "role": "CLIENT" }
+
+# Vérification de l'email (lien reçu par mail)
+GET /api/v1/auth/verify-email?token=<uuid>
+# → 200 OK         Email vérifié
+# → 404 Not Found  Token invalide
+# → 410 Gone       Token expiré (renvoyer un nouveau lien)
+
+# Renvoyer l'email de vérification
+POST /api/v1/auth/resend-verification
+{ "email": "jean@solaris.com" }
+# → 200 OK  Nouveau token envoyé (remplace l'ancien)
 ```
 
 ### Comptes
@@ -358,10 +396,53 @@ banking-platform/
 | UI | Tailwind CSS v4 · shadcn/ui · Lucide |
 | HTTP client (FE) | Axios · TanStack Query v5 |
 | Formulaires (FE) | React Hook Form v7 · Zod v4 |
+| Emails transactionnels | Spring Mail · Brevo SMTP (STARTTLS) |
 | Conteneurisation | Docker · Docker Compose |
 | CI/CD | GitHub Actions · GHCR |
 | Déploiement | TrueNAS Scale (VM) · nginx reverse proxy |
 | Build | Maven 3.9 · npm |
+
+## Vérification email
+
+Lors de l'inscription, chaque nouvel utilisateur reçoit un email de confirmation avant de pouvoir se connecter.
+
+### Flux complet
+
+```
+1. POST /register        → compte créé (emailVerified=false) + email envoyé
+2. Utilisateur clique    → GET /verify-email?token=<uuid>
+3. Token valide          → emailVerified=true, accès autorisé
+4. Token expiré (>24h)   → 410 Gone → frontend propose de renvoyer un lien
+5. POST /resend-verification → nouveau token (24h) envoyé, ancien invalidé
+```
+
+### Comportements notables
+
+| Cas | Comportement |
+|---|---|
+| Email non vérifié → login | `403 Forbidden` — "Email not verified. Please check your inbox." |
+| Token expiré | `410 Gone` — le frontend affiche un bouton "Renvoyer le lien" |
+| Token invalide / déjà utilisé | `404 Not Found` |
+| Compte admin (créé par DataInitializer) | Pré-vérifié — aucun email envoyé |
+| Utilisateurs existants (avant la feature) | `emailVerified = NULL` → traité comme vérifié (compatibilité ascendante) |
+| SMTP non configuré (dev) | URL de vérification loguée dans la console, aucune exception |
+
+### Configuration SMTP (Brevo)
+
+Le service utilise [Brevo](https://brevo.com) comme fournisseur SMTP par défaut. Les variables d'environnement à définir en production :
+
+```
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=<ton_email_brevo>
+SMTP_PASSWORD=<clé_smtp_brevo>   # Générer dans Brevo → SMTP & API → Clés SMTP
+SMTP_FROM=noreply@ton-domaine.fr
+FRONTEND_URL=https://ton-domaine.fr
+```
+
+Pour que les emails arrivent en boîte principale et non en spam, il est recommandé d'authentifier le domaine d'envoi dans Brevo (enregistrements DKIM + DMARC dans le DNS).
+
+---
 
 ## Contribution
 
