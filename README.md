@@ -1,11 +1,11 @@
 # Solaris Bank — Banking Platform
 
 Plateforme bancaire complète construite sur une architecture microservices.
-Projet d'apprentissage couvrant Spring Boot, Spring Cloud Gateway, JPA, JWT, Kafka et React.
+Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et React.
 
 ---
 
-## CI/CD & Coverage
+## CI/CD & Couverture
 
 | Service | Build | Couverture |
 |---|---|---|
@@ -19,256 +19,295 @@ Projet d'apprentissage couvrant Spring Boot, Spring Cloud Gateway, JPA, JWT, Kaf
 ## Table des matières
 
 - [Architecture](#architecture)
+- [Flux de virement — Saga Kafka](#flux-de-virement--saga-kafka)
+- [Sécurité](#sécurité)
 - [Services](#services)
-- [Prérequis](#prérequis)
 - [Lancer le projet](#lancer-le-projet)
 - [API Reference](#api-reference)
 - [Structure du projet](#structure-du-projet)
+- [Stack technique](#stack-technique)
 
 ---
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                     React UI                        │
-└─────────────────────────┬───────────────────────────┘
-                          │ :8080
-┌─────────────────────────▼───────────────────────────┐
-│                    API Gateway                      │
-│         Validation JWT · Routing · X-User-Id        │
-└──────────┬──────────────────────────┬───────────────┘
-           │                          │
-    /auth/**│                         │/accounts/**
-           │                          │
-┌──────────▼──────────┐   ┌───────────▼─────────────┐
-│    auth-service     │   │    account-service      │
-│       :8081         │   │        :8082            │
-│                     │   │                         │
-│  Register · Login   │   │  Comptes · IBAN · Solde │
-│  JWT · BCrypt       │   │  Transactions (à venir) │
-└──────────┬──────────┘   └───────────┬─────────────┘
-           │                          │
-┌──────────▼──────────┐   ┌───────────▼─────────────┐
-│   postgres-auth     │   │   postgres-accounts     │
-│      :5433          │   │        :5434            │
-└─────────────────────┘   └─────────────────────────┘
+```mermaid
+graph TD
+    USR(["👤 Navigateur"])
+
+    subgraph FRONT["Frontend — :8080 (exposé)"]
+        NGINX["nginx\nSert la SPA · proxy /api/*"]
+        REACT["React 19 · Vite · Tailwind v4\nShadcn/ui · TanStack Query"]
+    end
+
+    subgraph GW["API Gateway — interne"]
+        FILTER["JwtGatewayFilter\nValide JWT\nInjecte X-User-Id · X-User-Role\nBloque /admin si rôle ≠ ADMIN"]
+        PROXY["ProxyController\nRouting par préfixe"]
+    end
+
+    subgraph SVC["Microservices"]
+        AUTH["auth-service :8081\nRegister · Login · BCrypt\nGestion utilisateurs admin\nDataInitializer — seed admin"]
+        ACC["account-service :8082\nComptes CHECKING / SAVINGS\nGénération IBAN · Solde\nGestion comptes admin"]
+        TX["transaction-service :8083\nVirements · Clé idempotence\nSaga Kafka · PENDING→COMPLETED\nHistorique paginé · Vue admin"]
+    end
+
+    subgraph MSG["Messaging"]
+        KAFKA[["Apache Kafka\ndebit-requested\ncredit-requested\ndebit-result · credit-result"]]
+    end
+
+    subgraph DB["Bases de données — isolation par service"]
+        DB1[("postgres-auth\n:5433")]
+        DB2[("postgres-accounts\n:5434")]
+        DB3[("postgres-transactions\n:5435")]
+    end
+
+    USR -->|HTTPS| NGINX
+    NGINX --> REACT
+    NGINX -->|"/api/*"| FILTER
+    FILTER --> PROXY
+
+    PROXY -->|"/api/v1/auth/**\n/api/v1/admin/users/**"| AUTH
+    PROXY -->|"/api/v1/accounts/**\n/api/v1/admin/accounts/**"| ACC
+    PROXY -->|"/api/v1/transactions/**\n/api/v1/admin/transactions/**"| TX
+
+    TX -->|DebitRequestedEvent| KAFKA
+    KAFKA -->|DebitResultEvent| TX
+    KAFKA -->|CreditRequestedEvent| ACC
+    ACC -->|CreditResultEvent| KAFKA
+
+    AUTH --- DB1
+    ACC --- DB2
+    TX --- DB3
 ```
 
 ### Principes d'architecture
 
 - **Un service = une responsabilité** — chaque service gère son propre domaine métier
-- **Une base de données par service** — pas de base partagée entre services
-- **Sécurité centralisée** — le gateway valide le JWT et injecte `X-User-Id`, les services font confiance au gateway
-- **Stateless** — aucune session serveur, authentification par JWT uniquement
+- **Une base de données par service** — pas de base partagée, pas de jointures cross-service
+- **Sécurité centralisée + défense en profondeur** — le gateway valide le JWT et injecte les headers ; chaque service les re-valide indépendamment
+- **Stateless** — aucune session serveur, authentification uniquement par JWT
+- **Async par défaut** — les virements passent par Kafka (Saga pattern) pour la fiabilité et la résilience
+
+---
+
+## Flux de virement — Saga Kafka
+
+Quand un utilisateur effectue un virement, la transaction passe par une saga orchestrée via Kafka. Le frontend reçoit immédiatement un `202 Accepted` avec le statut `PENDING`, puis le solde est mis à jour de manière asynchrone.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant FE as Frontend
+    participant GW as API Gateway
+    participant TX as transaction-service
+    participant K as Kafka
+    participant ACC as account-service
+
+    U->>FE: Confirme le virement (modale)
+    FE->>GW: POST /api/v1/transactions/transfer<br/>Idempotency-Key: &lt;uuid&gt;
+    GW->>GW: Valide JWT · injecte X-User-Id
+    GW->>TX: Forward
+
+    TX->>TX: Vérifie clé idempotence (DB)
+    TX->>ACC: GET compte source (solde, statut)
+    TX->>TX: Valide solde suffisant
+    TX->>TX: INSERT transaction → PENDING
+    TX->>K: DebitRequestedEvent
+    TX-->>FE: 202 Accepted (PENDING)
+
+    K->>ACC: DebitRequestedEvent
+    ACC->>ACC: Débite le compte source
+    ACC->>K: DebitResultEvent(SUCCESS)
+
+    K->>TX: DebitResultEvent
+    TX->>K: CreditRequestedEvent
+
+    K->>ACC: CreditRequestedEvent
+    ACC->>ACC: Crédite le compte destinataire
+    ACC->>K: CreditResultEvent(SUCCESS)
+
+    K->>TX: CreditResultEvent
+    TX->>TX: UPDATE transaction → COMPLETED
+```
+
+> **Idempotence** : chaque soumission de formulaire génère un UUID unique (`Idempotency-Key`). Si la requête est rejouée (double-clic, timeout réseau), le serveur retourne la transaction existante sans en créer une seconde. La contrainte `UNIQUE` en base garantit ce comportement même sous charge concurrente.
+
+---
+
+## Sécurité
+
+### Authentification & Autorisation
+
+| Couche | Mécanisme |
+|---|---|
+| **Transport** | HTTPS (TLS) via reverse proxy |
+| **Identité** | JWT signé HMAC-SHA256, durée 24h |
+| **Mots de passe** | BCrypt (coût par défaut) |
+| **Rôles** | `CLIENT` / `ADMIN` — claim `role` dans le JWT |
+
+### Protection des routes admin (3 couches)
+
+```
+Requête → [1] AdminRoute (React)  →  [2] JwtGatewayFilter  →  [3] AdminController
+              Redirige /admin          403 si role ≠ ADMIN       Valide X-User-Role
+              si role ≠ ADMIN          avant tout routage         (défense en profondeur)
+```
+
+- Les comptes `ADMIN` ne peuvent pas accéder au portail client (`ProtectedRoute` les renvoie vers `/admin`)
+- L'inscription publique crée toujours un compte `CLIENT` — il est impossible de s'auto-promouvoir
+- Le compte admin initial est créé par `DataInitializer` au démarrage, via les variables d'environnement `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+
+### Idempotence des transactions
+
+Chaque virement porte un `Idempotency-Key` (UUID généré côté client). En cas de rejeu :
+- **Même clé** → le serveur retourne la transaction existante (pas de doublon)
+- **Succès** → nouvelle clé générée pour le prochain virement
+- **Échec** → même clé conservée (le retry est sûr)
 
 ---
 
 ## Services
 
 ### API Gateway — `:8080`
-Point d'entrée unique de la plateforme.
-- Valide le JWT sur toutes les routes protégées
-- Injecte le header `X-User-Id` pour les services en aval
-- Route les requêtes vers le bon microservice
-- Routes publiques : `/api/v1/auth/login`, `/api/v1/auth/register`
+Point d'entrée unique. Valide le JWT, injecte `X-User-Id` et `X-User-Role` dans chaque requête en aval. Bloque l'accès à `/api/v1/admin/**` pour tout token avec `role ≠ ADMIN`.
+
+Routes publiques (sans JWT) : `POST /api/v1/auth/login`, `POST /api/v1/auth/register`
 
 ### auth-service — `:8081`
-Gestion des utilisateurs et de l'authentification.
-- Inscription avec validation du mot de passe (maj, min, chiffre, caractère spécial)
-- Login avec génération de JWT (access token 24h + refresh token 7j)
-- Hashage BCrypt des mots de passe
-- Gestion des erreurs de validation avec messages explicites
+- Inscription avec validation stricte du mot de passe (maj, min, chiffre, caractère spécial)
+- Login → access token JWT (24h) + refresh token (7j)
+- `DataInitializer` : seede le compte admin au démarrage depuis `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+- Endpoints admin : liste des utilisateurs, activation / désactivation
 
 ### account-service — `:8082`
-Gestion des comptes bancaires.
-- Création de compte (CHECKING ou SAVINGS)
-- Génération automatique d'IBAN français (algorithme MOD-97)
-- Consultation des comptes et soldes
-- Blocage / activation de compte
+- Création de compte `CHECKING` ou `SAVINGS`
+- Génération d'IBAN français valide (algorithme MOD-97)
+- Opérations de débit/crédit (consommateur Kafka)
+- Endpoints admin : liste de tous les comptes, blocage / déblocage
 
-### transaction-service — `:8083` *(à venir)*
-Virements et historique des transactions.
-- Virements entre comptes avec pattern Saga
-- Détection de fraude via Kafka
-- Historique paginé avec export CSV
-
-### fraud-detection-service — `:8084` *(à venir)*
-Analyse des transactions en temps réel.
-- Scoring de risque
-- Règles métier configurables
-- Alertes et résolution manuelle
-
-### report-service — `:8085` *(à venir)*
-Génération de relevés et exports.
-- Relevés PDF mensuels
-- Exports CSV
-- Spring Batch pour la génération en masse
-
----
-
-## Prérequis
-
-| Outil | Version minimale |
-|---|---|
-| Java | 21 |
-| Maven | 3.9+ |
-| Docker Desktop | 4.x |
-| IntelliJ IDEA | 2024+ (recommandé) |
+### transaction-service — `:8083`
+- Virements asynchrones via Saga Kafka
+- Clé d'idempotence pour la protection contre les doublons
+- Statuts : `PENDING` → `COMPLETED` / `FAILED`
+- Historique paginé par compte
+- Endpoints admin : vue globale de toutes les transactions
 
 ---
 
 ## Lancer le projet
 
-### 1. Démarrer les bases de données
+### Développement local
+
+**Prérequis** : Java 21, Maven 3.9+, Docker Desktop
 
 ```bash
+# 1. Démarrer PostgreSQL et Kafka
 cd infrastructure
 docker compose up -d
+
+# 2. Lancer les services (un terminal par service)
+cd services/auth-service        && ./mvnw spring-boot:run
+cd services/account-service     && ./mvnw spring-boot:run
+cd services/transaction-service && ./mvnw spring-boot:run
+cd services/api-gateway         && ./mvnw spring-boot:run
+
+# 3. Lancer le frontend
+cd frontend
+npm install
+npm run dev          # http://localhost:5173 avec proxy → gateway :8080
 ```
 
-Vérifie que les containers tournent :
-```bash
-docker ps
-# postgres-auth      → :5433
-# postgres-accounts  → :5434
+Pour créer le compte admin en local, ajoute dans `services/auth-service/src/main/resources/application.properties` :
+```properties
+admin.email=admin@solaris.bank
+admin.password=TonMotDePasse123!
 ```
+Puis redémarre `auth-service`. Supprime ces lignes ensuite (ne pas committer).
 
-### 2. Lancer les services
+### Production (Docker Compose)
 
-Chaque service se lance dans un terminal séparé :
-
-```bash
-# Terminal 1 — auth-service
-cd services/auth-service
-./mvnw spring-boot:run
-
-# Terminal 2 — account-service
-cd services/account-service
-./mvnw spring-boot:run
-
-# Terminal 3 — API Gateway (lancer en dernier)
-cd services/api-gateway
-./mvnw spring-boot:run
-```
-
-### 3. Vérifier que tout tourne
+Les images sont construites et poussées vers GHCR par GitHub Actions à chaque push sur `main`.
 
 ```bash
-# auth-service
-curl http://localhost:8081/actuator/health
+# Sur le serveur — créer le fichier .env
+cat > .env <<EOF
+DB_PASSWORD=<mot_de_passe_fort>
+JWT_SECRET=<clé_base64_256_bits>
+JWT_EXPIRATION=86400000
+JWT_REFRESH_EXPIRATION=604800000
+ADMIN_EMAIL=admin@solaris.bank
+ADMIN_PASSWORD=<mot_de_passe_fort>
+EOF
 
-# account-service
-curl http://localhost:8082/actuator/health
-
-# gateway
-curl http://localhost:8080/actuator/health
+# Démarrer la stack
+docker compose -f docker-compose.prod.yml up -d
 ```
+
+Seul le port **8080** est exposé (nginx frontend). L'api-gateway et les microservices sont internes au réseau Docker.
 
 ---
 
 ## API Reference
 
-Toutes les requêtes passent par le gateway sur le port **8080**.
+Toutes les requêtes passent par le gateway sur le port **8080**.  
+Les routes protégées nécessitent `Authorization: Bearer <token>`.
 
 ### Auth
 
-#### S'inscrire
 ```bash
+# Inscription
 POST /api/v1/auth/register
-Content-Type: application/json
+{ "firstname": "Jean", "lastname": "Dupont", "email": "jean@solaris.com", "password": "Pass@123" }
+# → 201 { "message": "Account created successfully", "userId": "uuid..." }
 
-{
-  "firstname": "Jean",
-  "lastname": "Dupont",
-  "email": "jean@solaris.com",
-  "password": "Pass@123"
-}
-```
-Réponse `201 Created` :
-```json
-{
-  "message": "Account created successfully",
-  "userId": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-#### Se connecter
-```bash
+# Connexion
 POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "email": "jean@solaris.com",
-  "password": "Pass@123"
-}
-```
-Réponse `200 OK` :
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "email": "jean@solaris.com",
-  "firstname": "Jean",
-  "lastname": "Dupont",
-  "role": "CLIENT"
-}
+{ "email": "jean@solaris.com", "password": "Pass@123" }
+# → 200 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "role": "CLIENT" }
 ```
 
-### Accounts
+### Comptes
 
-> Toutes les routes accounts nécessitent le header `Authorization: Bearer <token>`
-
-#### Créer un compte
 ```bash
-POST /api/v1/accounts
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "type": "CHECKING"
-}
-```
-Réponse `201 Created` :
-```json
-{
-  "id": "uuid...",
-  "iban": "FR7630006000010000000000197",
-  "type": "CHECKING",
-  "balance": 0,
-  "currency": "EUR",
-  "status": "ACTIVE",
-  "createdAt": "2026-05-22T18:00:00"
-}
+POST   /api/v1/accounts              # Créer un compte { "type": "CHECKING" | "SAVINGS" }
+GET    /api/v1/accounts              # Lister mes comptes
+GET    /api/v1/accounts/{id}         # Détail d'un compte
+PUT    /api/v1/accounts/{id}/status  # Changer le statut (?status=BLOCKED)
 ```
 
-#### Lister mes comptes
+### Transactions
+
 ```bash
-GET /api/v1/accounts
-Authorization: Bearer <token>
+POST /api/v1/transactions/transfer   # Effectuer un virement
+     Idempotency-Key: <uuid>         # Header recommandé
+     { "fromAccountId": "uuid", "toAccountId": "uuid", "amount": 100.00 }
+# → 202 Accepted (statut PENDING, traitement asynchrone)
+
+GET  /api/v1/transactions?accountId=<uuid>&page=0&size=20  # Historique paginé
+GET  /api/v1/transactions/{id}                             # Détail d'une transaction
 ```
 
-#### Détail d'un compte
+### Admin _(rôle ADMIN requis)_
+
 ```bash
-GET /api/v1/accounts/{id}
-Authorization: Bearer <token>
+GET   /api/v1/admin/users                       # Liste tous les utilisateurs
+PATCH /api/v1/admin/users/{id}/status?active=false  # Activer / désactiver
+GET   /api/v1/admin/accounts?page=0&size=20     # Tous les comptes
+PATCH /api/v1/admin/accounts/{id}/status?status=BLOCKED  # Bloquer / débloquer
+GET   /api/v1/admin/transactions?page=0&size=20 # Toutes les transactions
 ```
 
-#### Changer le statut d'un compte
-```bash
-PUT /api/v1/accounts/{id}/status?status=BLOCKED
-Authorization: Bearer <token>
-```
-
-### Codes d'erreur
+### Codes HTTP
 
 | Code | Signification |
 |---|---|
+| `201` | Ressource créée |
+| `202` | Accepté (traitement asynchrone en cours) |
 | `400` | Validation échouée (champ manquant, format invalide) |
-| `401` | Token JWT absent, expiré ou invalide |
-| `403` | Accès refusé (ressource appartenant à un autre utilisateur) |
+| `401` | Token absent, expiré ou identifiants incorrects |
+| `403` | Accès refusé (ressource d'un autre utilisateur ou rôle insuffisant) |
 | `404` | Ressource introuvable |
-| `409` | Conflit (email déjà utilisé, IBAN déjà existant) |
+| `409` | Conflit (email déjà utilisé) |
 | `500` | Erreur serveur inattendue |
 
 ---
@@ -277,21 +316,30 @@ Authorization: Bearer <token>
 
 ```
 banking-platform/
+├── .github/
+│   └── workflows/
+│       ├── build.yml          # CI — build, tests, couverture (5 services en parallèle)
+│       └── deploy.yml         # CD — push GHCR + SSH deploy sur TrueNAS
+│
 ├── services/
-│   ├── api-gateway/             # Spring Cloud Gateway MVC — port 8080
-│   ├── auth-service/            # Authentification JWT — port 8081
-│   ├── account-service/         # Comptes bancaires — port 8082
-│   ├── transaction-service/     # Virements Kafka/Saga — port 8083
-│   ├── fraud-detection-service/ # (à venir) — port 8084
-│   └── report-service/          # (à venir) — port 8085
+│   ├── api-gateway/           # Spring Boot — JWT filter, proxy HTTP, routing
+│   ├── auth-service/          # Spring Boot — register/login, admin users, JWT
+│   ├── account-service/       # Spring Boot — comptes IBAN, Kafka consumer
+│   └── transaction-service/   # Spring Boot — virements, Saga, idempotence
 │
 ├── frontend/
-│   └── banking-ui/              # React + Vite (à venir)
+│   ├── src/
+│   │   ├── components/        # Layout, Navbar, AdminLayout, ProtectedRoute, AdminRoute…
+│   │   ├── pages/             # LoginPage, DashboardPage, TransferPage…
+│   │   │   └── admin/         # AdminDashboardPage, AdminUsersPage…
+│   │   ├── lib/               # api.ts (Axios), auth.ts (JWT decode)
+│   │   └── types/             # Interfaces TypeScript (Account, Transaction, AdminUser…)
+│   ├── nginx.conf             # Sert la SPA + proxy /api/* → api-gateway
+│   └── Dockerfile             # Multi-stage : node build → nginx
 │
 └── infrastructure/
-    ├── docker-compose.yml        # Environnement local (PostgreSQL, Kafka)
-    ├── docker-compose.prod.yml   # Production (images GHCR)
-    └── vm-setup/                 # Scripts de provisioning de la VM de déploiement
+    ├── docker-compose.yml      # Local : PostgreSQL × 3 + Kafka
+    └── docker-compose.prod.yml # Production : stack complète (images GHCR)
 ```
 
 ---
@@ -300,13 +348,16 @@ banking-platform/
 
 | Couche | Technologie |
 |---|---|
-| Language | Java 21 |
+| Language backend | Java 21 |
 | Framework | Spring Boot 4.x |
-| Gateway | Spring Cloud Gateway MVC 2025.x |
-| Sécurité | Spring Security + JWT (JJWT 0.12.6) |
-| Persistance | Spring Data JPA + Hibernate |
-| Base de données | PostgreSQL 16 |
-| Messaging | Apache Kafka *(à venir)* |
-| Conteneurisation | Docker Compose |
-| Frontend | React + Vite *(à venir)* |
-| Build | Maven 3.9 |
+| Sécurité | Spring Security · JJWT 0.12 · BCrypt |
+| Persistance | Spring Data JPA · Hibernate · PostgreSQL 16 |
+| Messaging | Apache Kafka (KRaft, sans ZooKeeper) |
+| Frontend | React 19 · Vite 8 · TypeScript 6 |
+| UI | Tailwind CSS v4 · shadcn/ui · Lucide |
+| HTTP client (FE) | Axios · TanStack Query v5 |
+| Formulaires (FE) | React Hook Form v7 · Zod v4 |
+| Conteneurisation | Docker · Docker Compose |
+| CI/CD | GitHub Actions · GHCR |
+| Déploiement | TrueNAS Scale (VM) · nginx reverse proxy |
+| Build | Maven 3.9 · npm |
