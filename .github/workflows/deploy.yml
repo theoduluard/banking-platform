@@ -9,14 +9,15 @@ on:
     branches: [main]
 
 # Required secrets (Settings → Secrets → Actions):
-#   NAS_HOST        – TrueNAS IP or DDNS hostname
-#   NAS_USER        – SSH user (e.g. root or admin)
-#   NAS_SSH_KEY     – Private SSH key (PEM / OpenSSH format)
-#   NAS_PORT        – SSH port (default 22)
-#   NAS_DEPLOY_PATH – Absolute path on the NAS where docker-compose.prod.yml lives
-#   GHCR_TOKEN      – GitHub PAT with read:packages scope (for NAS to pull images)
-#   ADMIN_EMAIL     – Bootstrap admin account email
-#   ADMIN_PASSWORD  – Bootstrap admin account password (strong)
+#   NAS_HOST         – TrueNAS IP or DDNS hostname
+#   NAS_USER         – SSH user (e.g. root or admin)
+#   NAS_SSH_KEY      – Private SSH key (PEM / OpenSSH format)
+#   NAS_PORT         – SSH port (default 22)
+#   NAS_DEPLOY_PATH  – Absolute path on the NAS where docker-compose.prod.yml lives
+#   GHCR_TOKEN       – GitHub PAT with read:packages scope (for NAS to pull images)
+#   ADMIN_EMAIL      – Bootstrap admin account email
+#   ADMIN_PASSWORD   – Bootstrap admin account password (strong)
+#   GRAFANA_PASSWORD – Grafana admin password (optional — defaults to "admin" if not set)
 
 env:
   REGISTRY: ghcr.io
@@ -105,17 +106,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Push the up-to-date compose file to the VM before restarting
-      - name: Copy docker-compose.prod.yml to VM
+      # Push the up-to-date infrastructure config files to the VM.
+      # strip_components: 1 removes the leading "infrastructure/" so that
+      # every file lands directly under NAS_DEPLOY_PATH.
+      - name: Copy infrastructure config files to VM
         uses: appleboy/scp-action@v0.1.7
         with:
-          host:    ${{ secrets.NAS_HOST }}
+          host:     ${{ secrets.NAS_HOST }}
           username: ${{ secrets.NAS_USER }}
-          key:     ${{ secrets.NAS_SSH_KEY }}
-          port:    ${{ secrets.NAS_PORT }}
-          source:  infrastructure/docker-compose.prod.yml
-          target:  ${{ secrets.NAS_DEPLOY_PATH }}
-          strip_components: 1   # removes the "infrastructure/" prefix on the VM
+          key:      ${{ secrets.NAS_SSH_KEY }}
+          port:     ${{ secrets.NAS_PORT }}
+          source:   "infrastructure/docker-compose.prod.yml,infrastructure/prometheus-prod.yml,infrastructure/grafana"
+          target:   ${{ secrets.NAS_DEPLOY_PATH }}
+          strip_components: 1
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -124,7 +127,7 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD
+          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD
           script: |
             set -e
 
@@ -139,6 +142,7 @@ jobs:
               sleep 15
             done
             ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+            GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}" \
               docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             # Remove dangling images to save disk space
@@ -146,7 +150,8 @@ jobs:
 
             echo "Deployment complete."
         env:
-          GHCR_TOKEN:     ${{ secrets.GHCR_TOKEN }}
-          REPO_OWNER:     ${{ github.repository_owner }}
-          ADMIN_EMAIL:    ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          GHCR_TOKEN:        ${{ secrets.GHCR_TOKEN }}
+          REPO_OWNER:        ${{ github.repository_owner }}
+          ADMIN_EMAIL:       ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD:    ${{ secrets.ADMIN_PASSWORD }}
+          GRAFANA_PASSWORD:  ${{ secrets.GRAFANA_PASSWORD }}
