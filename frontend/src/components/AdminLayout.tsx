@@ -10,6 +10,8 @@ import {
   ArrowLeftRight,
   LogOut,
   ShieldCheck,
+  BarChart2,
+  ExternalLink,
 } from 'lucide-react'
 
 const sidebarLinks = [
@@ -70,6 +72,26 @@ export default function AdminLayout() {
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* External tools */}
+        <div className="border-t border-border/60 p-3">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            Outils
+          </p>
+          <a
+            href="http://localhost:3000"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              'flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-sm font-medium',
+              'text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors',
+            )}
+          >
+            <BarChart2 size={15} strokeWidth={1.8} />
+            Grafana
+            <ExternalLink size={11} className="ml-auto opacity-50" />
+          </a>
+        </div>
 
         {/* Bottom actions */}
         <div className="flex flex-col gap-0.5 border-t border-border/60 p-3">
