@@ -72,7 +72,8 @@ class TransactionControllerTest {
 
     @Test
     void transfer_shouldReturn202_withPendingTransaction() throws Exception {
-        when(transactionService.transfer(eq(userId), any(TransferRequest.class)))
+        // Third arg = idempotency key (null here — header not sent in this test)
+        when(transactionService.transfer(eq(userId), any(TransferRequest.class), any()))
                 .thenReturn(pendingResponse);
 
         TransferRequest request = new TransferRequest();

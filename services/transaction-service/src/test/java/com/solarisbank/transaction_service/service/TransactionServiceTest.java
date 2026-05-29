@@ -92,7 +92,7 @@ class TransactionServiceTest {
         when(accountClient.getAccount(fromAccountId, userId)).thenReturn(activeSourceAccount);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(pendingTransaction);
 
-        TransactionResponse response = transactionService.transfer(userId, transferRequest);
+        TransactionResponse response = transactionService.transfer(userId, transferRequest, null);
 
         assertThat(response).isNotNull();
         assertThat(response.getStatus()).isEqualTo(Transaction.Status.PENDING);
@@ -101,10 +101,25 @@ class TransactionServiceTest {
     }
 
     @Test
+    void transfer_shouldReturnExisting_whenIdempotencyKeyAlreadyUsed() {
+        // Simulate a duplicate request: same key already present in DB
+        String key = UUID.randomUUID().toString();
+        when(transactionRepository.findByIdempotencyKey(key))
+                .thenReturn(Optional.of(pendingTransaction));
+
+        TransactionResponse response = transactionService.transfer(userId, transferRequest, key);
+
+        // Must return the existing transaction without touching account or Kafka
+        assertThat(response.getId()).isEqualTo(transactionId);
+        verifyNoInteractions(accountClient, sagaEventProducer);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
     void transfer_shouldThrow_whenSourceAndDestinationAreSameAccount() {
         transferRequest.setToAccountId(fromAccountId);
 
-        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest))
+        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("same account");
 
@@ -116,7 +131,7 @@ class TransactionServiceTest {
         activeSourceAccount.setStatus("BLOCKED");
         when(accountClient.getAccount(fromAccountId, userId)).thenReturn(activeSourceAccount);
 
-        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest))
+        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("not active");
 
@@ -129,7 +144,7 @@ class TransactionServiceTest {
         activeSourceAccount.setBalance(new BigDecimal("50.00"));
         when(accountClient.getAccount(fromAccountId, userId)).thenReturn(activeSourceAccount);
 
-        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest))
+        assertThatThrownBy(() -> transactionService.transfer(userId, transferRequest, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Insufficient funds");
 
@@ -142,7 +157,7 @@ class TransactionServiceTest {
         when(accountClient.getAccount(fromAccountId, userId)).thenReturn(activeSourceAccount);
         when(transactionRepository.save(any())).thenReturn(pendingTransaction);
 
-        transactionService.transfer(userId, transferRequest);
+        transactionService.transfer(userId, transferRequest, null);
 
         verify(sagaEventProducer).publishDebitRequest(argThat(event ->
                 event.getAccountId().equals(fromAccountId)
