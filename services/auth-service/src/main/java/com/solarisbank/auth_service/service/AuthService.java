@@ -8,13 +8,15 @@ import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.repository.UserRepository;
 import com.solarisbank.auth_service.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,11 +27,14 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final EmailService emailService;
 
     public User register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Email already in use", HttpStatus.CONFLICT);
         }
+
+        String token  = UUID.randomUUID().toString();
 
         User user = User.builder()
                 .email(request.getEmail())
@@ -37,9 +42,15 @@ public class AuthService {
                 .firstname(request.getFirstname())
                 .lastname(request.getLastname())
                 .role(User.Role.CLIENT)
+                .emailVerified(false)
+                .emailVerificationToken(token)
+                .emailVerificationTokenExpiry(LocalDateTime.now().plusHours(24))
                 .build();
 
-        return userRepository.save(user);
+        userRepository.save(user);
+        emailService.sendVerificationEmail(user.getEmail(), user.getFirstname(), token);
+        log.info("[Register] New user {} — verification email sent", user.getEmail());
+        return user;
     }
 
     public LoginResponse login(LoginRequest request) {
@@ -50,7 +61,49 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
 
+        // NULL = pre-existing user (backward compat) → allowed
+        // FALSE = registered after email-verification was introduced → must verify
+        if (Boolean.FALSE.equals(user.getEmailVerified())) {
+            throw new BusinessException("Email not verified. Please check your inbox.", HttpStatus.FORBIDDEN);
+        }
+
         return buildLoginResponse(user);
+    }
+
+    // ── Email verification ────────────────────────────────────────────────────
+
+    public void verifyEmail(String token) {
+        User user = userRepository.findByEmailVerificationToken(token)
+                .orElseThrow(() -> new BusinessException(
+                        "Invalid or expired verification token.", HttpStatus.NOT_FOUND));
+
+        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(
+                    "Verification token has expired. Please request a new one.", HttpStatus.GONE);
+        }
+
+        user.setEmailVerified(true);
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationTokenExpiry(null);
+        userRepository.save(user);
+        log.info("[Verify] Email verified for user {}", user.getEmail());
+    }
+
+    public void resendVerification(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new BusinessException("Email is already verified.", HttpStatus.BAD_REQUEST);
+        }
+
+        String token = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(token);
+        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+        userRepository.save(user);
+
+        emailService.sendVerificationEmail(user.getEmail(), user.getFirstname(), token);
+        log.info("[Verify] Resent verification email to {}", email);
     }
 
     /**

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -44,9 +45,24 @@ public class User {
     @Column(nullable = false)
     private Boolean isActive;
 
+    /**
+     * Set to false on registration; becomes true once the user clicks the
+     * verification link in the email.  NULL means the user was created before
+     * email-verification was introduced (treated as verified for backward compat).
+     */
+    private Boolean emailVerified;
+
+    /** UUID token sent by email — null once verified or not yet set. */
+    @Column(unique = true)
+    private String emailVerificationToken;
+
+    /** Token expires 24 h after issuance. */
+    private LocalDateTime emailVerificationTokenExpiry;
+
     @PrePersist
     public void prePersist(){
         this.createdAt = LocalDate.now();
-        this.isActive = true;
+        if (this.isActive      == null) this.isActive      = true;
+        if (this.emailVerified == null) this.emailVerified = false;
     }
 }

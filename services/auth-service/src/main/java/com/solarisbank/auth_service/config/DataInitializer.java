@@ -4,6 +4,7 @@ import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -25,7 +26,7 @@ public class DataInitializer implements ApplicationRunner {
     private String adminPassword;
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(@NonNull ApplicationArguments args) {
         if (adminEmail.isBlank() || adminPassword.isBlank()) {
             log.warn("[DataInitializer] ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin seed.");
             return;
@@ -42,6 +43,7 @@ public class DataInitializer implements ApplicationRunner {
                 .firstname("Admin")
                 .lastname("Solaris")
                 .role(User.Role.ADMIN)
+                .emailVerified(true)   // Admin is pre-verified — no email required
                 .build();
 
         userRepository.save(admin);

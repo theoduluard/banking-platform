@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import axios from 'axios'
 import api from '@/lib/api'
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Logo from '@/components/Logo'
+import { MailCheck } from 'lucide-react'
 
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
 
@@ -28,7 +30,8 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export default function RegisterPage() {
-  const navigate = useNavigate()
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
+
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
@@ -36,8 +39,7 @@ export default function RegisterPage() {
   async function onSubmit({ firstname, lastname, email, password }: FormData) {
     try {
       await api.post('/api/v1/auth/register', { firstname, lastname, email, password })
-      toast.success('Compte créé ! Connectez-vous.')
-      navigate('/login')
+      setRegisteredEmail(email)   // show "check inbox" screen
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status
@@ -54,6 +56,40 @@ export default function RegisterPage() {
         toast.error('Une erreur inattendue est survenue.')
       }
     }
+  }
+
+  // ── "Check your inbox" screen ──────────────────────────────────────────────
+  if (registeredEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-8 text-center">
+          <div className="flex justify-center">
+            <Logo size={36} />
+          </div>
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10">
+                <MailCheck size={28} className="text-primary" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Vérifiez votre email</h1>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                Un lien d'activation a été envoyé à{' '}
+                <span className="font-medium text-foreground">{registeredEmail}</span>.
+                <br />Cliquez sur ce lien pour activer votre compte.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vous n'avez rien reçu ?{' '}
+              <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+                Connectez-vous pour renvoyer l'email.
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

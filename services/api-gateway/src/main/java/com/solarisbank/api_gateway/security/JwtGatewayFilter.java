@@ -28,6 +28,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/refresh",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification",
             // Prometheus scraping and health probes — internal traffic only
             "/actuator/prometheus",
             "/actuator/health"

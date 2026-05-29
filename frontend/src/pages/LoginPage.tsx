@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ShieldCheck, TrendingUp, Zap } from 'lucide-react'
+import { ShieldCheck, TrendingUp, Zap, MailWarning } from 'lucide-react'
 import axios from 'axios'
 import api from '@/lib/api'
 import { setToken, setRefreshToken, getUserRoleFromToken } from '@/lib/auth'
@@ -26,22 +27,29 @@ const features = [
 ]
 
 export default function LoginPage() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  const [resending, setResending]             = useState(false)
+
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
 
   async function onSubmit(data: FormData) {
+    setUnverifiedEmail(null)
     try {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
       setRefreshToken(res.data.refreshToken)
-      // Redirect admins to their panel, regular users to dashboard
       navigate(getUserRoleFromToken() === 'ADMIN' ? '/admin' : '/dashboard')
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status
-        if (status === 401 || status === 400) {
+        const msg    = err.response?.data?.error as string | undefined
+        if (status === 403 && msg?.toLowerCase().includes('not verified')) {
+          // Show inline banner instead of a toast — lets user resend from this page
+          setUnverifiedEmail(data.email)
+        } else if (status === 401 || status === 400) {
           toast.error('Email ou mot de passe incorrect.')
         } else if (!err.response) {
           toast.error('Impossible de joindre le serveur.')
@@ -51,6 +59,19 @@ export default function LoginPage() {
       } else {
         toast.error('Une erreur inattendue est survenue.')
       }
+    }
+  }
+
+  async function resendVerification() {
+    if (!unverifiedEmail) return
+    setResending(true)
+    try {
+      await api.post('/api/v1/auth/resend-verification', { email: unverifiedEmail })
+      toast.success('Email de vérification renvoyé !')
+    } catch {
+      toast.error('Impossible de renvoyer l\'email.')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -110,6 +131,28 @@ export default function LoginPage() {
             <h2 className="text-2xl font-semibold tracking-tight">Bienvenue</h2>
             <p className="mt-1 text-sm text-muted-foreground">Connectez-vous à votre espace</p>
           </div>
+
+          {/* ── Unverified email banner ─────────────────────────────────── */}
+          {unverifiedEmail && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+              <MailWarning size={16} className="mt-0.5 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-amber-800">Email non vérifié</p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  Vérifiez votre boîte mail ou{' '}
+                  <button
+                    type="button"
+                    onClick={resendVerification}
+                    disabled={resending}
+                    className="font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-50"
+                  >
+                    {resending ? 'Envoi…' : 'renvoyez le lien d\'activation'}
+                  </button>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div className="space-y-1.5">
