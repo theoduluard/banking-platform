@@ -27,7 +27,10 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            // Prometheus scraping and health probes — internal traffic only
+            "/actuator/prometheus",
+            "/actuator/health"
     );
 
     private static final String ADMIN_PATH_PREFIX = "/api/v1/admin/";
