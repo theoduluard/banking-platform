@@ -52,6 +52,21 @@ function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount)
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** generateUUID() requires a secure context (HTTPS/localhost).
+ *  This fallback works over plain HTTP as well. */
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return generateUUID()
+  }
+  // RFC 4122 v4 fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function TransferPage() {
@@ -60,7 +75,7 @@ export default function TransferPage() {
   const userId         = getUserIdFromToken()
 
   // ── Idempotency key ──────────────────────────────────────────────────────
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
+  const [idempotencyKey, setIdempotencyKey] = useState(() => generateUUID())
 
   // ── Destination state ────────────────────────────────────────────────────
   const [destType,       setDestType]       = useState<DestType>('own')
@@ -177,7 +192,7 @@ export default function TransferPage() {
         },
       })
       toast.success('Virement initié ! Traitement en cours.')
-      setIdempotencyKey(crypto.randomUUID())
+      setIdempotencyKey(generateUUID())
       navigate('/dashboard')
     } catch {
       toast.error('Le virement a échoué. Vérifiez votre solde.')

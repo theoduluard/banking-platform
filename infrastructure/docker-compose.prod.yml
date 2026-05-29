@@ -9,7 +9,8 @@
 #   ADMIN_PASSWORD=<strong_admin_password>
 #
 # Traffic flow:
-#   Internet → router NAT (external:8081 → VM:8080) → frontend nginx
+#   Internet → router NAT → NPM sur NAS (TLS via Let's Encrypt)
+#   NPM → solaris-bank.theoduluard.fr → VM:8080 → frontend nginx
 #   nginx → /          → React SPA (static files)
 #   nginx → /api/*     → api-gateway:8080 (internal, not exposed)
 #
@@ -185,7 +186,7 @@ services:
 
   # ── Frontend (nginx) ───────────────────────────────────────────────────────
   # Serves the React SPA and reverse-proxies /api/* to api-gateway.
-  # This is the only container exposed to the host (port 8080 → router NAT 8081).
+  # Exposed sur le port 8080 — NPM sur le NAS gère le HTTPS et proxifie vers ce port.
   frontend:
     image: ghcr.io/theoduluard/banking-platform/frontend:latest
     container_name: frontend
@@ -196,6 +197,7 @@ services:
       - "8080:80"
     networks:
       - banking-net
+
 
   # ── Observability ─────────────────────────────────────────────────────────
   # Prometheus scrapes /actuator/prometheus on each service every 15 s.
