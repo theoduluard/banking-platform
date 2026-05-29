@@ -50,6 +50,14 @@ public class Transaction {
 
     private String description;
 
+    /**
+     * Idempotency key sent by the client (UUID generated per form submission).
+     * Unique constraint ensures a duplicate request is never processed twice,
+     * even under concurrent load. NULL is allowed (legacy / no-key requests).
+     */
+    @Column(unique = true)
+    private String idempotencyKey;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

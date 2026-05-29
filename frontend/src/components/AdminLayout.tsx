@@ -10,7 +10,6 @@ import {
   ArrowLeftRight,
   LogOut,
   ShieldCheck,
-  ExternalLink,
 } from 'lucide-react'
 
 const sidebarLinks = [
@@ -72,19 +71,8 @@ export default function AdminLayout() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Bottom links */}
+        {/* Bottom actions */}
         <div className="flex flex-col gap-0.5 border-t border-border/60 p-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="h-9 justify-start gap-2.5 px-3 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <Link to="/dashboard">
-              <ExternalLink size={14} />
-              Portail client
-            </Link>
-          </Button>
           <Button
             variant="ghost"
             size="sm"

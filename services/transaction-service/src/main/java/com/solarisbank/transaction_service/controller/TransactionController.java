@@ -22,11 +22,13 @@ public class TransactionController {
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> transfer(
             @Valid @RequestBody TransferRequest request,
-            @RequestHeader("X-User-Id") UUID userId) {
+            @RequestHeader("X-User-Id") UUID userId,
+            // Optional: not every client sends this header (graceful degradation)
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
         // 202 Accepted : la saga est lancée, le statut sera mis à jour de façon asynchrone
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(transactionService.transfer(userId, request));
+                .body(transactionService.transfer(userId, request, idempotencyKey));
     }
 
     @GetMapping

@@ -10,6 +10,7 @@ import com.solarisbank.transaction_service.kafka.producer.SagaEventProducer;
 import com.solarisbank.transaction_service.model.Transaction;
 import com.solarisbank.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,15 +22,28 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final AccountClient accountClient;
     private final SagaEventProducer sagaEventProducer;
 
-    public TransactionResponse transfer(UUID userId, TransferRequest request) {
+    public TransactionResponse transfer(UUID userId, TransferRequest request, String idempotencyKey) {
 
-        // 1. Validations rapides (synchrones)
+        // ── Idempotency check ──────────────────────────────────────────────────
+        // If the client sent a key and we already have a transaction for it,
+        // return the existing response without processing anything again.
+        // This handles: double-clicks, network retries, duplicate form submissions.
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var existing = transactionRepository.findByIdempotencyKey(idempotencyKey);
+            if (existing.isPresent()) {
+                log.info("[Idempotency] Duplicate request blocked — key={}", idempotencyKey);
+                return toResponse(existing.get());
+            }
+        }
+
+        // ── 1. Validations rapides (synchrones) ───────────────────────────────
         if (request.getFromAccountId().equals(request.getToAccountId())) {
             throw new BusinessException("Cannot transfer to the same account", HttpStatus.BAD_REQUEST);
         }
@@ -43,7 +57,9 @@ public class TransactionService {
             throw new BusinessException("Insufficient funds", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
-        // 2. Créer la transaction en PENDING
+        // ── 2. Créer la transaction en PENDING ────────────────────────────────
+        // The idempotency key is stored here. The UNIQUE constraint in the DB
+        // is the last line of defence against concurrent duplicate requests.
         Transaction transaction = transactionRepository.save(
                 Transaction.builder()
                         .fromAccountId(request.getFromAccountId())
@@ -51,10 +67,11 @@ public class TransactionService {
                         .initiatedByUserId(userId)
                         .amount(request.getAmount())
                         .description(request.getDescription())
+                        .idempotencyKey(idempotencyKey)
                         .build()
         );
 
-        // 3. Publier l'événement Kafka → la saga démarre (async)
+        // ── 3. Publier l'événement Kafka → la saga démarre (async) ───────────
         sagaEventProducer.publishDebitRequest(new DebitRequestedEvent(
                 transaction.getId(),
                 request.getFromAccountId(),
@@ -62,7 +79,7 @@ public class TransactionService {
                 request.getAmount()
         ));
 
-        // 4. Retourner immédiatement PENDING (202 Accepted)
+        // ── 4. Retourner immédiatement PENDING (202 Accepted) ─────────────────
         return toResponse(transaction);
     }
 

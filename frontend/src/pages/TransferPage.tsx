@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useState } from 'react'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Account } from '@/types'
@@ -18,7 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeftRight, ArrowLeft, ArrowDown, Info } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { ArrowLeftRight, ArrowLeft, ArrowDown, Info, AlertTriangle } from 'lucide-react'
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount)
@@ -39,6 +48,19 @@ export default function TransferPage() {
   const navigate = useNavigate()
   const userId   = getUserIdFromToken()
 
+  // ── Idempotency key ────────────────────────────────────────────────────────
+  // One UUID per form instance. Generated once when the page loads.
+  // • On SUCCESS  → regenerate (so the next transfer gets a fresh key)
+  // • On FAILURE  → keep the same key (retry is safe, server is idempotent)
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
+
+  // ── Confirmation modal state ───────────────────────────────────────────────
+  // pendingTransfer holds validated form data while the modal is open.
+  // It is null when the modal is closed.
+  const [pendingTransfer, setPendingTransfer] = useState<FormData | null>(null)
+  const [isSubmitting,    setIsSubmitting]    = useState(false)
+
+  // ── Data ───────────────────────────────────────────────────────────────────
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['accounts', userId],
     queryFn:  () => api
@@ -47,24 +69,53 @@ export default function TransferPage() {
     enabled: !!userId,
   })
 
-  const { control, register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { control, register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
 
-  const fromId = watch('fromAccountId')
+  const fromId      = watch('fromAccountId')
   const fromAccount = accounts.find(a => a.id === fromId)
 
-  async function onSubmit(data: FormData) {
+  // ── Step 1 : form submit → open confirmation modal ─────────────────────────
+  // Zod validation runs here via handleSubmit.
+  // If valid, we store the data and open the recap modal — NO API call yet.
+  function onRequestConfirm(data: FormData) {
+    setPendingTransfer(data)
+  }
+
+  // ── Step 2 : user clicks "Confirmer" in modal → API call ──────────────────
+  async function onConfirm() {
+    if (!pendingTransfer) return
+    setIsSubmitting(true)
     try {
-      await api.post('/api/v1/transactions/transfer', data, {
-        headers: { 'X-User-Id': userId },
+      await api.post('/api/v1/transactions/transfer', pendingTransfer, {
+        headers: {
+          'X-User-Id':       userId,
+          // The idempotency key ties this exact transfer attempt to one DB row.
+          // If this request is replayed (network retry, double-click on mobile, etc.)
+          // the server will return the existing transaction instead of creating a new one.
+          'Idempotency-Key': idempotencyKey,
+        },
       })
       toast.success('Virement initié ! Traitement en cours.')
+      // SUCCESS → generate a new key so the NEXT transfer is independent
+      setIdempotencyKey(crypto.randomUUID())
       navigate('/dashboard')
     } catch {
       toast.error('Le virement a échoué. Vérifiez votre solde.')
+      // FAILURE → keep the same key: if the first attempt actually went through
+      // silently (e.g. network timeout after server processed it), retrying with
+      // the same key is safe — the server won't create a second transaction.
+    } finally {
+      setIsSubmitting(false)
+      setPendingTransfer(null)
     }
   }
+
+  // Short display of the destination UUID (e.g. "550e8400…6655")
+  const toAccountDisplay = pendingTransfer
+    ? `${pendingTransfer.toAccountId.slice(0, 8)}…${pendingTransfer.toAccountId.slice(-4)}`
+    : ''
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -77,7 +128,9 @@ export default function TransferPage() {
         <p className="mt-1 text-sm text-muted-foreground">Les virements sont traités de manière asynchrone.</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      {/* ── Transfer form ─────────────────────────────────────────────────── */}
+      <form onSubmit={handleSubmit(onRequestConfirm)} className="space-y-5">
+
         {/* From */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Compte source</Label>
@@ -161,15 +214,92 @@ export default function TransferPage() {
           </CardContent>
         </Card>
 
-        <Button
-          type="submit"
-          className="h-11 w-full gap-2 text-sm font-medium"
-          disabled={isSubmitting}
-        >
+        {/* Submit opens the modal — does NOT send any request */}
+        <Button type="submit" className="h-11 w-full gap-2 text-sm font-medium">
           <ArrowLeftRight size={15} />
-          {isSubmitting ? 'Envoi en cours…' : 'Confirmer le virement'}
+          Vérifier et confirmer
         </Button>
       </form>
+
+      {/* ── Confirmation modal ────────────────────────────────────────────── */}
+      <Dialog
+        open={!!pendingTransfer}
+        onOpenChange={open => { if (!open && !isSubmitting) setPendingTransfer(null) }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight size={18} className="text-primary" />
+              Confirmer le virement
+            </DialogTitle>
+            <DialogDescription>
+              Vérifiez les détails ci-dessous avant d'envoyer.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingTransfer && (
+            <div className="space-y-3 py-1">
+              {/* From account */}
+              <div className="rounded-lg border bg-muted/40 px-4 py-3">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Depuis</p>
+                {fromAccount ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {fromAccount.type === 'CHECKING' ? 'Compte courant' : 'Compte épargne'}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      ···· {fromAccount.iban.slice(-8)}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="font-mono text-xs">{pendingTransfer.fromAccountId}</p>
+                )}
+              </div>
+
+              {/* To account */}
+              <div className="rounded-lg border bg-muted/40 px-4 py-3">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vers</p>
+                <p className="font-mono text-sm">{toAccountDisplay}</p>
+              </div>
+
+              {/* Amount — visually prominent */}
+              <div className="rounded-lg border-2 border-primary/20 bg-primary/5 px-4 py-3 text-center">
+                <p className="mb-0.5 text-xs font-medium text-muted-foreground">Montant</p>
+                <p className="text-2xl font-bold tabular-nums text-primary">
+                  {formatAmount(pendingTransfer.amount, 'EUR')}
+                </p>
+              </div>
+
+              {/* Irreversibility warning */}
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed text-amber-700">
+                  Cette opération est <strong>irréversible</strong>. Vérifiez le compte destinataire avant de confirmer.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPendingTransfer(null)}
+              disabled={isSubmitting}
+              className="flex-1"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={onConfirm}
+              disabled={isSubmitting}
+              className="flex-1 gap-2"
+            >
+              <ArrowLeftRight size={14} />
+              {isSubmitting ? 'Envoi en cours…' : 'Confirmer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
