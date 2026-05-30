@@ -100,15 +100,20 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
 
         @Override
         public String getHeader(String name) {
-            String override = extraHeaders.get(name);
-            if (override != null) return override;
+            // Case-insensitive lookup so X-User-Id, x-user-id, etc. all match
+            for (Map.Entry<String, String> entry : extraHeaders.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
             return super.getHeader(name);
         }
 
         @Override
         public Enumeration<String> getHeaders(String name) {
-            String override = extraHeaders.get(name);
-            if (override != null) return Collections.enumeration(List.of(override));
+            for (Map.Entry<String, String> entry : extraHeaders.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) {
+                    return Collections.enumeration(List.of(entry.getValue()));
+                }
+            }
             return super.getHeaders(name);
         }
 
@@ -116,7 +121,9 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
         public Enumeration<String> getHeaderNames() {
             List<String> names = Collections.list(super.getHeaderNames());
             extraHeaders.keySet().forEach(k -> {
-                if (!names.contains(k)) names.add(k);
+                // Case-insensitive check: prevents adding X-User-Id when x-user-id already exists
+                boolean alreadyPresent = names.stream().anyMatch(n -> n.equalsIgnoreCase(k));
+                if (!alreadyPresent) names.add(k);
             });
             return Collections.enumeration(names);
         }

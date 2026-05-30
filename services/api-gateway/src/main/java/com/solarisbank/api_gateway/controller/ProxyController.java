@@ -87,9 +87,18 @@ public class ProxyController {
                 .method(HttpMethod.valueOf(request.getMethod()))
                 .uri(URI.create(url));
 
+        // Forward all headers except host and gateway security headers (injected explicitly below)
         Collections.list(request.getHeaderNames()).stream()
                 .filter(h -> !h.equalsIgnoreCase("host"))
+                .filter(h -> !h.equalsIgnoreCase("X-User-Id"))
+                .filter(h -> !h.equalsIgnoreCase("X-User-Role"))
                 .forEach(h -> spec.header(h, request.getHeader(h)));
+
+        // Inject gateway-authenticated user context exactly once (prevents duplication)
+        String userId   = request.getHeader("X-User-Id");
+        String userRole = request.getHeader("X-User-Role");
+        if (userId   != null) spec.header("X-User-Id",   userId);
+        if (userRole != null) spec.header("X-User-Role", userRole);
 
         if (body != null && body.length > 0) {
             spec.body(body);
