@@ -58,7 +58,7 @@ function formatAmount(amount: number, currency: string) {
  *  This fallback works over plain HTTP as well. */
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return generateUUID()
+    return crypto.randomUUID()
   }
   // RFC 4122 v4 fallback
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -213,7 +213,10 @@ export default function TransferPage() {
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
-        <Link to="/dashboard"><ArrowLeft size={14} /> Retour</Link>
+        <Link to="/dashboard">
+          <ArrowLeft size={14} />
+          <span>Retour</span>
+        </Link>
       </Button>
 
       <div>
@@ -275,7 +278,7 @@ export default function TransferPage() {
                 type="button"
                 onClick={() => switchDestType(type)}
                 className={cn(
-                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-all',
                   destType === type
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
@@ -440,7 +443,7 @@ export default function TransferPage() {
           disabled={!toAccountId}
         >
           <ArrowLeftRight size={15} />
-          Vérifier et confirmer
+          <span>Vérifier et confirmer</span>
         </Button>
       </form>
 
@@ -522,7 +525,7 @@ export default function TransferPage() {
             </Button>
             <Button onClick={onConfirm} disabled={isSubmitting} className="flex-1 gap-2">
               <ArrowLeftRight size={14} />
-              {isSubmitting ? 'Envoi…' : 'Confirmer'}
+              <span>{isSubmitting ? 'Envoi…' : 'Confirmer'}</span>
             </Button>
           </DialogFooter>
         </DialogContent>

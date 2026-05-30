@@ -70,7 +70,8 @@ function AccountCard({ account }: { account: Account }) {
             asChild
           >
             <span>
-              Détails <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+              Détails
+              <ArrowRight size={13} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
             </span>
           </Button>
         </CardContent>
@@ -125,13 +126,15 @@ export default function DashboardPage() {
             <Button size="sm" variant="secondary" asChild
               className="gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0">
               <Link to="/transfer">
-                <ArrowLeftRight size={14} /> Virer
+                <ArrowLeftRight size={14} />
+                <span>Virer</span>
               </Link>
             </Button>
             <Button size="sm" variant="secondary" asChild
               className="gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0">
               <Link to="/accounts/new">
-                <PlusCircle size={14} /> Nouveau
+                <PlusCircle size={14} />
+                <span>Nouveau</span>
               </Link>
             </Button>
           </div>
@@ -144,7 +147,8 @@ export default function DashboardPage() {
           <h2 className="text-base font-semibold">Mes comptes</h2>
           <Button variant="ghost" size="sm" asChild className="gap-1 text-xs text-muted-foreground">
             <Link to="/accounts/new">
-              <PlusCircle size={13} /> Ouvrir un compte
+              <PlusCircle size={13} />
+              <span>Ouvrir un compte</span>
             </Link>
           </Button>
         </div>
@@ -176,7 +180,10 @@ export default function DashboardPage() {
                 <p className="mt-1 text-sm text-muted-foreground">Ouvrez votre premier compte en quelques secondes.</p>
               </div>
               <Button asChild size="sm" className="gap-1.5">
-                <Link to="/accounts/new"><PlusCircle size={14} /> Ouvrir un compte</Link>
+                <Link to="/accounts/new">
+                  <PlusCircle size={14} />
+                  <span>Ouvrir un compte</span>
+                </Link>
               </Button>
             </CardContent>
           </Card>

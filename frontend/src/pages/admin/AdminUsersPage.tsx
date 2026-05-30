@@ -128,8 +128,8 @@ export default function AdminUsersPage() {
                           disabled={toggleStatus.isPending}
                         >
                           {u.isActive
-                            ? <><UserX size={13} /> Désactiver</>
-                            : <><UserCheck size={13} /> Activer</>
+                            ? <><UserX size={13} /><span>Désactiver</span></>
+                            : <><UserCheck size={13} /><span>Activer</span></>
                           }
                         </Button>
                       )}

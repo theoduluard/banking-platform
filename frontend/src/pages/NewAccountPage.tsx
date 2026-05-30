@@ -58,7 +58,10 @@ export default function NewAccountPage() {
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
-        <Link to="/dashboard"><ArrowLeft size={14} /> Retour</Link>
+        <Link to="/dashboard">
+          <ArrowLeft size={14} />
+          <span>Retour</span>
+        </Link>
       </Button>
 
       <div>

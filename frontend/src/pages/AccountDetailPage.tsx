@@ -122,7 +122,10 @@ export default function AccountDetailPage() {
     <div className="space-y-6">
       {/* Back */}
       <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
-        <Link to="/dashboard"><ArrowLeft size={14} /> Retour</Link>
+        <Link to="/dashboard">
+          <ArrowLeft size={14} />
+          <span>Retour</span>
+        </Link>
       </Button>
 
       {/* Account header */}
@@ -160,7 +163,8 @@ export default function AccountDetailPage() {
                 <Button size="sm" variant="secondary" asChild
                   className="mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0">
                   <Link to="/transfer">
-                    <ArrowLeftRight size={13} /> Virer
+                    <ArrowLeftRight size={13} />
+                    <span>Virer</span>
                   </Link>
                 </Button>
               </div>

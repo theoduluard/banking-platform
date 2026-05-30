@@ -182,7 +182,7 @@ function OperationDialog({
               {isDeposit
                 ? <ArrowDownToLine size={14} />
                 : <ArrowUpFromLine size={14} />}
-              {isSubmitting ? 'Traitement…' : isDeposit ? 'Créditer' : 'Débiter'}
+              <span>{isSubmitting ? 'Traitement…' : isDeposit ? 'Créditer' : 'Débiter'}</span>
             </Button>
           </DialogFooter>
         </form>

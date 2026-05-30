@@ -63,7 +63,8 @@ function BeneficiaryRow({
       <div className="flex items-center gap-1.5">
         <Button variant="ghost" size="sm" asChild className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-primary">
           <Link to={`/transfer?iban=${b.iban}&name=${encodeURIComponent(b.name)}`}>
-            <ArrowLeftRight size={13} /> Virer
+            <ArrowLeftRight size={13} />
+            <span>Virer</span>
           </Link>
         </Button>
         <Button
@@ -243,7 +244,7 @@ export default function BeneficiariesPage() {
               </Button>
               <Button type="submit" disabled={isSubmitting} className="flex-1 gap-2">
                 <Plus size={14} />
-                {isSubmitting ? 'Ajout…' : 'Ajouter'}
+                <span>{isSubmitting ? 'Ajout…' : 'Ajouter'}</span>
               </Button>
             </DialogFooter>
           </form>

@@ -63,7 +63,7 @@ export default function AdminLayout() {
               >
                 <Link to={to}>
                   <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
-                  {label}
+                  <span>{label}</span>
                 </Link>
               </Button>
             )
@@ -102,7 +102,7 @@ export default function AdminLayout() {
             className="h-9 justify-start gap-2.5 px-3 text-sm text-muted-foreground hover:text-destructive"
           >
             <LogOut size={14} />
-            Déconnexion
+            <span>Déconnexion</span>
           </Button>
         </div>
       </aside>

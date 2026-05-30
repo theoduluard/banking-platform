@@ -49,7 +49,7 @@ export default function Navbar() {
               >
                 <Link to={to}>
                   <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
-                  {label}
+                  <span>{label}</span>
                 </Link>
               </Button>
             )
@@ -64,7 +64,7 @@ export default function Navbar() {
           className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
         >
           <LogOut size={15} />
-          <span className="hidden sm:inline">Déconnexion</span>
+          <span className="hidden sm:inline shrink-0">Déconnexion</span>
         </Button>
       </div>
     </header>
