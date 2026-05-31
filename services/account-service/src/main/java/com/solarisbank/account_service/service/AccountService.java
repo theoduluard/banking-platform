@@ -68,21 +68,19 @@ public class AccountService {
 
     // ── KYC document submission ────────────────────────────────────────────────
 
+    /**
+     * Submits KYC documents for the authenticated user.
+     * Called right after first login (registration flow) — no account exists yet.
+     * accountId is intentionally left null; documents are looked up by userId.
+     */
     @Transactional
-    public void submitDocuments(UUID accountId, UUID userId, VerificationDocumentRequest request) {
-        Account account = accountRepository.findByAccountIdAndUserId(accountId, userId)
-                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
-
-        if (account.getStatus() != Account.Status.PENDING_APPROVAL) {
-            throw new BusinessException("Documents can only be submitted for pending accounts", HttpStatus.BAD_REQUEST);
-        }
-
-        // Replace any existing documents for this account
-        documentRepository.findByAccountId(accountId)
+    public void submitKyc(UUID userId, VerificationDocumentRequest request) {
+        // Replace any existing KYC for this user (re-submission allowed)
+        documentRepository.findByUserId(userId)
                 .ifPresent(documentRepository::delete);
 
         VerificationDocument doc = VerificationDocument.builder()
-                .accountId(accountId)
+                .accountId(null)
                 .userId(userId)
                 .selfieBase64(request.getSelfieBase64())
                 .selfieContentType(request.getSelfieContentType())
@@ -91,6 +89,11 @@ public class AccountService {
                 .build();
 
         documentRepository.save(doc);
+    }
+
+    /** Returns true if the user has already submitted their KYC documents. */
+    public boolean hasKyc(UUID userId) {
+        return documentRepository.existsByUserId(userId);
     }
 
     // ── Admin approval workflow ────────────────────────────────────────────────
@@ -144,8 +147,16 @@ public class AccountService {
         return response;
     }
 
+    /**
+     * Admin: fetch KYC documents for a given account.
+     * Looks up the account to get the userId, then fetches the KYC document by userId
+     * (documents are no longer keyed by accountId — they're submitted at registration).
+     */
     public VerificationDocumentResponse getAccountDocuments(UUID accountId) {
-        return documentRepository.findByAccountId(accountId)
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        return documentRepository.findByUserId(account.getUserId())
                 .map(doc -> VerificationDocumentResponse.builder()
                         .id(doc.getId())
                         .accountId(doc.getAccountId())
@@ -156,7 +167,7 @@ public class AccountService {
                         .idCardContentType(doc.getIdCardContentType())
                         .submittedAt(doc.getSubmittedAt())
                         .build())
-                .orElseThrow(() -> new BusinessException("No documents found for this account", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("No KYC documents found for this user", HttpStatus.NOT_FOUND));
     }
 
     // ── Transfers ──────────────────────────────────────────────────────────────

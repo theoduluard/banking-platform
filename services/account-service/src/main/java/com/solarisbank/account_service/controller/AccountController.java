@@ -4,6 +4,7 @@ import com.solarisbank.account_service.dto.AccountResponse;
 import com.solarisbank.account_service.dto.CreateAccountRequest;
 import com.solarisbank.account_service.dto.VerificationDocumentRequest;
 import com.solarisbank.account_service.model.Account;
+import java.util.HashMap;
 import com.solarisbank.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -71,17 +72,28 @@ public class AccountController {
     }
 
     /**
-     * Submits KYC documents (selfie + ID card) for a pending account.
-     * Required for first account creation before admin can approve.
+     * Submits KYC documents (selfie + ID card) for the authenticated user.
+     * Called right after first login — no account needed yet.
      */
-    @PostMapping("/{id}/documents")
-    public ResponseEntity<Void> submitDocuments(
-            @PathVariable UUID id,
+    @PostMapping("/kyc")
+    public ResponseEntity<Void> submitKyc(
             @RequestHeader("X-User-Id") UUID userId,
             @Valid @RequestBody VerificationDocumentRequest request) {
 
-        accountService.submitDocuments(id, userId, request);
+        accountService.submitKyc(userId, request);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Returns whether the authenticated user has already submitted their KYC documents.
+     */
+    @GetMapping("/kyc/status")
+    public ResponseEntity<Map<String, Boolean>> getKycStatus(
+            @RequestHeader("X-User-Id") UUID userId) {
+
+        Map<String, Boolean> result = new HashMap<>();
+        result.put("submitted", accountService.hasKyc(userId));
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/{id}/debit")

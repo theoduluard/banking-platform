@@ -10,6 +10,7 @@ import AdminLayout       from '@/components/AdminLayout'
 import LoginPage         from '@/pages/LoginPage'
 import RegisterPage      from '@/pages/RegisterPage'
 import VerifyEmailPage   from '@/pages/VerifyEmailPage'
+import KYCPage           from '@/pages/KYCPage'
 import DashboardPage     from '@/pages/DashboardPage'
 import AccountDetailPage from '@/pages/AccountDetailPage'
 import NewAccountPage    from '@/pages/NewAccountPage'
@@ -43,6 +44,9 @@ export default function App() {
           <Route path="/login"        element={<LoginPage />} />
           <Route path="/register"     element={<RegisterPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+          {/* Onboarding — protected, no Layout (full-page flow) */}
+          <Route path="/onboarding/kyc" element={<ProtectedRoute><KYCPage /></ProtectedRoute>} />
 
           {/* Protected — wrapped in Layout (Navbar + container) */}
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

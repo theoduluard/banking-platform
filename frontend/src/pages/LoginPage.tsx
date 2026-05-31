@@ -41,7 +41,20 @@ export default function LoginPage() {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
       setRefreshToken(res.data.refreshToken)
-      navigate(getUserRoleFromToken() === 'ADMIN' ? '/admin' : '/dashboard')
+
+      if (getUserRoleFromToken() === 'ADMIN') {
+        navigate('/admin')
+        return
+      }
+
+      // For clients: check KYC status to decide where to redirect
+      try {
+        const kyc = await api.get<{ submitted: boolean }>('/api/v1/accounts/kyc/status')
+        navigate(kyc.data.submitted ? '/dashboard' : '/onboarding/kyc')
+      } catch {
+        // If the KYC check fails for any reason, fall back to dashboard
+        navigate('/dashboard')
+      }
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status

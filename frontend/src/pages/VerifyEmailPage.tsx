@@ -64,11 +64,11 @@ export default function VerifyEmailPage() {
             <div>
               <h1 className="text-xl font-semibold tracking-tight">Email vérifié !</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Votre compte est activé. Vous pouvez maintenant vous connecter.
+                Votre compte est activé. Connectez-vous pour finaliser votre inscription en téléchargeant vos justificatifs d'identité.
               </p>
             </div>
             <Link to="/login" className={cn(buttonVariants(), 'h-11 w-full')}>
-              Se connecter
+              Se connecter et continuer
             </Link>
           </div>
         )}

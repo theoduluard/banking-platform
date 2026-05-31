@@ -21,7 +21,9 @@ public class VerificationDocument {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    // Nullable — KYC is now submitted at registration time, before any account exists.
+    // Set to null when submitted via POST /api/v1/accounts/kyc.
+    @Column(nullable = true)
     private UUID accountId;
 
     @Column(nullable = false)
