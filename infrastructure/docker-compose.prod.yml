@@ -118,7 +118,7 @@ services:
       JWT_REFRESH_EXPIRATION:        ${JWT_REFRESH_EXPIRATION}
       ADMIN_EMAIL:                   ${ADMIN_EMAIL}
       ADMIN_PASSWORD:                ${ADMIN_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
       # SMTP — Brevo by default (override with any SMTP provider)
       SMTP_HOST:                     ${SMTP_HOST:-smtp-relay.brevo.com}
       SMTP_PORT:                     ${SMTP_PORT:-587}
@@ -144,7 +144,7 @@ services:
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET:                    ${JWT_SECRET}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
     networks:
       - banking-net
 
@@ -163,7 +163,7 @@ services:
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL:           http://account-service:8082
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
     networks:
       - banking-net
 
@@ -199,7 +199,7 @@ services:
       SPRING_DATASOURCE_USERNAME:     solaris
       SPRING_DATASOURCE_PASSWORD:     ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_JPA_HIBERNATE_DDL_AUTO:  update
+      SPRING_JPA_HIBERNATE_DDL_AUTO:  create-drop
     networks:
       - banking-net
 
