@@ -29,10 +29,6 @@ export function removeToken(): void {
   localStorage.removeItem('refreshToken')
 }
 
-export function isAuthenticated(): boolean {
-  return !!getToken()
-}
-
 /** Decode the JWT payload (no verification — display only). */
 function decodePayload(token: string): Record<string, unknown> | null {
   try {
@@ -40,6 +36,21 @@ function decodePayload(token: string): Record<string, unknown> | null {
   } catch {
     return null
   }
+}
+
+export function isAuthenticated(): boolean {
+  const token = getToken()
+  if (!token) return false
+  const payload = decodePayload(token)
+  if (!payload) return false
+  // Check expiry — exp is in seconds, Date.now() in ms
+  const exp = payload.exp as number | undefined
+  if (exp && Date.now() / 1000 > exp) {
+    // Token expired — clean up so future checks are instant
+    removeToken()
+    return false
+  }
+  return true
 }
 
 /** Decode the 'sub' claim (userId) from the JWT. */

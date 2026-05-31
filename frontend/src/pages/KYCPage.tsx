@@ -2,20 +2,46 @@ import { useRef, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import axios from 'axios'
 import api from '@/lib/api'
 import Logo from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import {
-  Camera, IdCard, Upload, Loader2, ShieldCheck, CheckCircle2, ArrowRight,
+  Camera, IdCard, Upload, Loader2, ShieldCheck, CheckCircle2, ArrowRight, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+// ── Accepted file types ───────────────────────────────────────────────────────
+
+const ACCEPTED_MIME = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'image/bmp',
+  'image/tiff',
+  'application/pdf',
+])
+
+// Fallback check by extension when the browser doesn't report a MIME type (e.g. HEIC on some devices)
+const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?|pdf)$/i
+
+function isAccepted(file: File): boolean {
+  if (file.type && ACCEPTED_MIME.has(file.type)) return true
+  return ACCEPTED_EXT.test(file.name)
+}
 
 // ── File helpers ──────────────────────────────────────────────────────────────
 
 interface FileData {
-  base64: string
+  base64:      string
   contentType: string
-  previewUrl: string
+  filename:    string
+  isPdf:       boolean
+  previewUrl:  string   // data-URL for images, empty for PDF
 }
 
 function readFileAsBase64(file: File): Promise<FileData> {
@@ -24,8 +50,23 @@ function readFileAsBase64(file: File): Promise<FileData> {
     reader.onload = () => {
       const dataUrl = reader.result as string
       const [prefix, base64] = dataUrl.split(',')
-      const contentType = prefix.replace('data:', '').replace(';base64', '')
-      resolve({ base64, contentType, previewUrl: dataUrl })
+      // Normalise: some browsers report "image/jpg" instead of "image/jpeg"
+      let contentType = prefix.replace('data:', '').replace(';base64', '')
+      if (contentType === 'image/jpg') contentType = 'image/jpeg'
+      // Fallback for HEIC files where browser may report empty type
+      if (!contentType || contentType === 'application/octet-stream') {
+        if (/\.heic$/i.test(file.name)) contentType = 'image/heic'
+        else if (/\.heif$/i.test(file.name)) contentType = 'image/heif'
+        else if (/\.pdf$/i.test(file.name)) contentType = 'application/pdf'
+      }
+      const isPdf = contentType === 'application/pdf'
+      resolve({
+        base64,
+        contentType,
+        filename:   file.name,
+        isPdf,
+        previewUrl: isPdf ? '' : dataUrl,
+      })
     }
     reader.onerror = reject
     reader.readAsDataURL(file)
@@ -34,31 +75,31 @@ function readFileAsBase64(file: File): Promise<FileData> {
 
 // ── Upload zone ───────────────────────────────────────────────────────────────
 
+const ACCEPT_ATTR = 'image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,image/bmp,image/tiff,application/pdf'
+
 function UploadZone({
   label,
   hint,
   icon: Icon,
-  capture,
   file,
   onChange,
 }: {
-  label: string
-  hint: string
-  icon: typeof Camera
-  capture?: 'user' | 'environment'
-  file: FileData | null
+  label:    string
+  hint:     string
+  icon:     typeof Camera
+  file:     FileData | null
   onChange: (f: FileData) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(raw: File | undefined) {
     if (!raw) return
-    if (!raw.type.startsWith('image/')) {
-      toast.error('Veuillez sélectionner une image (JPG, PNG…)')
+    if (!isAccepted(raw)) {
+      toast.error('Format non supporté. Utilisez JPG, PNG, PDF, HEIC, WebP…')
       return
     }
-    if (raw.size > 10 * 1024 * 1024) {
-      toast.error('Image trop volumineuse (max 10 Mo)')
+    if (raw.size > 20 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux (max 20 Mo)')
       return
     }
     try {
@@ -81,19 +122,28 @@ function UploadZone({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
-        capture={capture}
+        accept={ACCEPT_ATTR}
         className="sr-only"
         onChange={e => handleFile(e.target.files?.[0])}
       />
+
       {file ? (
         <div className="space-y-3">
           <div className="relative mx-auto w-fit">
-            <img
-              src={file.previewUrl}
-              alt={label}
-              className="mx-auto h-32 w-32 rounded-xl object-cover shadow"
-            />
+            {file.isPdf ? (
+              <div className="mx-auto flex h-32 w-32 flex-col items-center justify-center gap-2 rounded-xl border bg-muted">
+                <FileText size={36} className="text-muted-foreground" />
+                <p className="max-w-[100px] truncate px-1 text-[10px] text-muted-foreground">
+                  {file.filename}
+                </p>
+              </div>
+            ) : (
+              <img
+                src={file.previewUrl}
+                alt={label}
+                className="mx-auto h-32 w-32 rounded-xl object-cover shadow"
+              />
+            )}
             <div className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-primary shadow">
               <CheckCircle2 size={13} className="text-primary-foreground" />
             </div>
@@ -114,8 +164,9 @@ function UploadZone({
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
             <Upload size={12} />
-            Ajouter une photo
+            Ajouter un fichier
           </span>
+          <p className="text-[10px] text-muted-foreground">JPG · PNG · PDF · HEIC · WebP</p>
         </div>
       )}
     </div>
@@ -125,9 +176,9 @@ function UploadZone({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function KYCPage() {
-  const navigate    = useNavigate()
-  const [selfie,    setSelfie]    = useState<FileData | null>(null)
-  const [idCard,    setIdCard]    = useState<FileData | null>(null)
+  const navigate     = useNavigate()
+  const [selfie,     setSelfie]     = useState<FileData | null>(null)
+  const [idCard,     setIdCard]     = useState<FileData | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // If user already has KYC, skip straight to dashboard
@@ -138,9 +189,7 @@ export default function KYCPage() {
   })
 
   useEffect(() => {
-    if (kycStatus?.submitted) {
-      navigate('/dashboard', { replace: true })
-    }
+    if (kycStatus?.submitted) navigate('/dashboard', { replace: true })
   }, [kycStatus, navigate])
 
   async function handleSubmit() {
@@ -155,8 +204,24 @@ export default function KYCPage() {
       })
       toast.success('Vérification d\'identité envoyée !')
       navigate('/dashboard', { replace: true })
-    } catch {
-      toast.error('Impossible d\'envoyer vos documents. Veuillez réessayer.')
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status
+        const msg    = err.response?.data?.error as string | undefined
+        if (status === 413) {
+          toast.error('Fichier trop volumineux. Compressez-le et réessayez.')
+        } else if (status === 400 && msg) {
+          toast.error(msg)
+        } else if (status === 401 || status === 403) {
+          toast.error('Session expirée. Reconnectez-vous.')
+        } else if (!err.response) {
+          toast.error('Serveur inaccessible. Vérifiez votre connexion.')
+        } else {
+          toast.error(`Erreur ${status ?? 'inconnue'}. Veuillez réessayer.`)
+        }
+      } else {
+        toast.error('Impossible d\'envoyer vos documents.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -214,17 +279,15 @@ export default function KYCPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <UploadZone
             label="Photo de vous"
-            hint="Prenez un selfie avec votre visage bien visible"
+            hint="Selfie ou photo récente avec votre visage visible"
             icon={Camera}
-            capture="user"
             file={selfie}
             onChange={setSelfie}
           />
           <UploadZone
-            label="Carte d'identité"
-            hint="Photographiez le recto de votre pièce d'identité"
+            label="Pièce d'identité"
+            hint="CNI, passeport ou titre de séjour (recto)"
             icon={IdCard}
-            capture="environment"
             file={idCard}
             onChange={setIdCard}
           />
@@ -234,8 +297,8 @@ export default function KYCPage() {
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <ShieldCheck size={15} className="mt-0.5 shrink-0 text-amber-600" />
           <p className="text-xs leading-relaxed text-amber-800">
-            <strong>Vos données sont sécurisées.</strong> Ces documents sont chiffrés et
-            accessibles uniquement à nos administrateurs pour vérification.
+            <strong>Vos données sont sécurisées.</strong> Ces documents sont accessibles
+            uniquement à nos administrateurs pour vérification.
           </p>
         </div>
 

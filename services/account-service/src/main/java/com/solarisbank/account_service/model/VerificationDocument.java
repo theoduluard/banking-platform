@@ -32,13 +32,13 @@ public class VerificationDocument {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String selfieBase64;
 
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 100)
     private String selfieContentType;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String idCardBase64;
 
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 100)
     private String idCardContentType;
 
     @Column(nullable = false)
