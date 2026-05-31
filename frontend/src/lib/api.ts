@@ -63,6 +63,13 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Auth endpoints (login, register, refresh…) return 401 for bad credentials,
+    // not for session expiry — never intercept them or we'd redirect to /login
+    // on every failed login attempt.
+    if (originalRequest.url?.includes('/api/v1/auth/')) {
+      return Promise.reject(error)
+    }
+
     const refreshToken = getRefreshToken()
 
     // No refresh token available → hard logout
