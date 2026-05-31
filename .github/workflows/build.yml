@@ -180,6 +180,68 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────
+  # messaging-service
+  # ─────────────────────────────────────────
+  messaging-service:
+    name: messaging-service
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: messaging_db
+          POSTGRES_USER: solaris
+          POSTGRES_PASSWORD: solaris123
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      kafka:
+        image: apache/kafka:latest
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build & Test
+        working-directory: services/messaging-service
+        run: ./mvnw verify
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: messaging-service-jar
+          path: services/messaging-service/target/*.jar
+          retention-days: 7
+
+  # ─────────────────────────────────────────
   # api-gateway
   # ─────────────────────────────────────────
   api-gateway:
@@ -249,7 +311,7 @@ jobs:
   coverage-badges:
     name: Coverage Badges
     runs-on: ubuntu-latest
-    needs: [ auth-service, account-service, transaction-service, api-gateway ]
+    needs: [ auth-service, account-service, transaction-service, api-gateway, messaging-service ]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
