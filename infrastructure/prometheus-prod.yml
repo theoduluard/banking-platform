@@ -24,3 +24,8 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['transaction-service:8083']
+
+  - job_name: 'messaging-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['messaging-service:8084']

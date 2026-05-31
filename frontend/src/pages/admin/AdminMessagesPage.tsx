@@ -387,6 +387,17 @@ export default function AdminMessagesPage() {
     queryFn: () => api.get<Page<Message>>(`/api/v1/admin/messages?page=${page}&size=20`).then(r => r.data),
   })
 
+  // Reuse the users cache (shared with UserSearchCombobox) to resolve userId → name
+  const { data: allUsers = [] } = useQuery<AdminUser[]>({
+    queryKey: ['admin', 'users'],
+    queryFn:  () => api.get<AdminUser[]>('/api/v1/admin/users').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const userMap = useMemo(
+    () => new Map(allUsers.map(u => [u.userId, u])),
+    [allUsers],
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -447,7 +458,17 @@ export default function AdminMessagesPage() {
                           )}
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{msg.body}</p>
-                        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/60">{msg.userId}</p>
+                        {(() => {
+                          const u = userMap.get(msg.userId)
+                          return u ? (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                              → {u.firstname} {u.lastname}
+                              <span className="ml-1 opacity-50">({u.email})</span>
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/50">{msg.userId}</p>
+                          )
+                        })()}
                       </div>
                       <p className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap">
                         {formatDate(msg.createdAt)}

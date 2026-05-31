@@ -167,6 +167,42 @@ services:
     networks:
       - banking-net
 
+  postgres-messaging:
+    image: postgres:16
+    container_name: postgres-messaging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       messaging_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-messaging-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d messaging_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  messaging-service:
+    image: ghcr.io/theoduluard/banking-platform/messaging-service:latest
+    container_name: messaging-service
+    restart: unless-stopped
+    depends_on:
+      postgres-messaging:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:          jdbc:postgresql://postgres-messaging:5432/messaging_db
+      SPRING_DATASOURCE_USERNAME:     solaris
+      SPRING_DATASOURCE_PASSWORD:     ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_JPA_HIBERNATE_DDL_AUTO:  update
+    networks:
+      - banking-net
+
   api-gateway:
     image: ghcr.io/theoduluard/banking-platform/api-gateway:latest
     container_name: api-gateway
@@ -175,11 +211,13 @@ services:
       - auth-service
       - account-service
       - transaction-service
+      - messaging-service
     environment:
       JWT_SECRET:              ${JWT_SECRET}
       AUTH_SERVICE_URL:        http://auth-service:8081
       ACCOUNT_SERVICE_URL:     http://account-service:8082
       TRANSACTION_SERVICE_URL: http://transaction-service:8083
+      MESSAGING_SERVICE_URL:   http://messaging-service:8084
     # Not exposed externally — nginx handles all incoming traffic
     networks:
       - banking-net
@@ -248,6 +286,7 @@ volumes:
   postgres-auth-data:
   postgres-accounts-data:
   postgres-transactions-data:
+  postgres-messaging-data:
   kafka-data:
   prometheus-data:
   grafana-data:

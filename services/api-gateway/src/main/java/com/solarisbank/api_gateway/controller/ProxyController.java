@@ -4,11 +4,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.net.URI;
 import java.util.Collections;
@@ -135,19 +137,29 @@ public class ProxyController {
             spec.body(body);
         }
 
-        return spec.exchange((req, res) -> {
-            HttpHeaders headers = new HttpHeaders();
-            res.getHeaders().forEach((key, values) -> {
-                if (!key.equalsIgnoreCase("Transfer-Encoding")) {
-                    headers.addAll(key, values);
-                }
+        try {
+            return spec.exchange((req, res) -> {
+                HttpHeaders headers = new HttpHeaders();
+                res.getHeaders().forEach((key, values) -> {
+                    if (!key.equalsIgnoreCase("Transfer-Encoding")) {
+                        headers.addAll(key, values);
+                    }
+                });
+                // res.getBody() is null for 204 No Content — guard against NPE
+                var bodyStream = res.getBody();
+                byte[] bodyBytes = (bodyStream != null) ? bodyStream.readAllBytes() : new byte[0];
+                return ResponseEntity.status(res.getStatusCode())
+                        .headers(headers)
+                        .body(bodyBytes);
             });
-            // res.getBody() is null for 204 No Content — guard against NPE
-            var bodyStream = res.getBody();
-            byte[] bodyBytes = (bodyStream != null) ? bodyStream.readAllBytes() : new byte[0];
-            return ResponseEntity.status(res.getStatusCode())
-                    .headers(headers)
-                    .body(bodyBytes);
-        });
+        } catch (RestClientException e) {
+            // Downstream service is unreachable — return a transparent 502 instead of
+            // letting Spring Boot produce a generic 500 "Internal Server Error".
+            String msg = "{\"status\":502,\"error\":\"Service unavailable\",\"detail\":\""
+                    + e.getMessage().replace("\"", "'") + "\"}";
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .header("Content-Type", "application/json")
+                    .body(msg.getBytes());
+        }
     }
 }
