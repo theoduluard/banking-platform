@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ShieldCheck, TrendingUp, Zap, MailWarning } from 'lucide-react'
+import { ShieldCheck, TrendingUp, Zap, MailWarning, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import api from '@/lib/api'
 import { setToken, setRefreshToken, getUserRoleFromToken } from '@/lib/auth'
@@ -29,6 +29,7 @@ const features = [
 export default function LoginPage() {
   const navigate  = useNavigate()
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  const [loginError,      setLoginError]      = useState<string | null>(null)
   const [resending, setResending]             = useState(false)
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -37,6 +38,7 @@ export default function LoginPage() {
 
   async function onSubmit(data: FormData) {
     setUnverifiedEmail(null)
+    setLoginError(null)
     try {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
@@ -63,14 +65,14 @@ export default function LoginPage() {
           // Show inline banner instead of a toast — lets user resend from this page
           setUnverifiedEmail(data.email)
         } else if (status === 401 || status === 400) {
-          toast.error('Email ou mot de passe incorrect.')
+          setLoginError('Email ou mot de passe incorrect.')
         } else if (!err.response) {
-          toast.error('Impossible de joindre le serveur.')
+          setLoginError('Impossible de joindre le serveur. Vérifiez votre connexion.')
         } else {
-          toast.error(`Erreur serveur (${status}).`)
+          setLoginError(`Une erreur est survenue (${status}). Réessayez dans quelques instants.`)
         }
       } else {
-        toast.error('Une erreur inattendue est survenue.')
+        setLoginError('Une erreur inattendue est survenue.')
       }
     }
   }
@@ -145,6 +147,14 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-muted-foreground">Connectez-vous à votre espace</p>
           </div>
 
+          {/* ── Invalid credentials banner ──────────────────────────────── */}
+          {loginError && (
+            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+              <p className="text-sm text-red-800">{loginError}</p>
+            </div>
+          )}
+
           {/* ── Unverified email banner ─────────────────────────────────── */}
           {unverifiedEmail && (
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
@@ -175,7 +185,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="jean@example.com"
                 className="h-11"
-                {...register('email')}
+                {...register('email', { onChange: () => setLoginError(null) })}
               />
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
             </div>
@@ -188,7 +198,7 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 className="h-11"
-                {...register('password')}
+                {...register('password', { onChange: () => setLoginError(null) })}
               />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
