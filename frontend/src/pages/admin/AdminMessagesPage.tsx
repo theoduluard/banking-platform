@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import api from '@/lib/api'
-import type { Message, Page } from '@/types'
+import type { Message, AdminUser, Page } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import {
   Bell, Plus, Send, Loader2, Info, AlertTriangle, FileText, CheckCircle2, XCircle,
+  Search, X, User,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +29,10 @@ import { cn } from '@/lib/utils'
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
+}
+
+function initials(u: AdminUser) {
+  return `${u.firstname[0] ?? ''}${u.lastname[0] ?? ''}`.toUpperCase()
 }
 
 const TYPE_CONFIG: Record<Message['type'], { icon: typeof Info; color: string; bg: string; label: string }> = {
@@ -38,10 +43,223 @@ const TYPE_CONFIG: Record<Message['type'], { icon: typeof Info; color: string; b
   REJECTION:  { icon: XCircle,       color: 'text-red-600',     bg: 'bg-red-50',     label: 'Refus' },
 }
 
+// ── User search combobox ──────────────────────────────────────────────────────
+
+function UserSearchCombobox({
+  value,
+  onChange,
+  error,
+}: {
+  value: string
+  onChange: (userId: string) => void
+  error?: string
+}) {
+  const [query,        setQuery]        = useState('')
+  const [open,         setOpen]         = useState(false)
+  const [highlighted,  setHighlighted]  = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const listRef      = useRef<HTMLUListElement>(null)
+
+  // Fetch all users once (shared cache with AdminUsersPage)
+  const { data: allUsers = [], isLoading: loadingUsers } = useQuery<AdminUser[]>({
+    queryKey: ['admin', 'users'],
+    queryFn:  () => api.get<AdminUser[]>('/api/v1/admin/users').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
+  const clients = useMemo(() => allUsers.filter(u => u.role === 'CLIENT'), [allUsers])
+
+  // Resolve currently-selected user object from uuid
+  const selected = useMemo(
+    () => clients.find(u => u.userId === value) ?? null,
+    [clients, value],
+  )
+
+  // Intelligent filter: firstname, lastname, reversed, email — partial match on any token
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    if (!q) return clients
+    return clients.filter(u => {
+      const tokens = [
+        u.firstname,
+        u.lastname,
+        `${u.firstname} ${u.lastname}`,
+        `${u.lastname} ${u.firstname}`,
+        u.email,
+      ]
+      return tokens.some(t => t.toLowerCase().includes(q))
+    })
+  }, [clients, query])
+
+  // Close on outside click
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [])
+
+  // Reset highlighted when list changes
+  useEffect(() => { setHighlighted(0) }, [filtered])
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (!listRef.current) return
+    const item = listRef.current.children[highlighted] as HTMLElement | undefined
+    item?.scrollIntoView({ block: 'nearest' })
+  }, [highlighted])
+
+  function handleSelect(user: AdminUser) {
+    onChange(user.userId)
+    setQuery('')
+    setOpen(false)
+  }
+
+  function handleClear() {
+    onChange('')
+    setQuery('')
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+      setOpen(true)
+      return
+    }
+    if (e.key === 'ArrowDown')  { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)) }
+    if (e.key === 'ArrowUp')    { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)) }
+    if (e.key === 'Enter')      { e.preventDefault(); if (filtered[highlighted]) handleSelect(filtered[highlighted]) }
+    if (e.key === 'Escape')     { setOpen(false) }
+  }
+
+  // ── Highlighted text helper ───────────────────────────────────────────────
+  function highlight(text: string) {
+    if (!query.trim()) return <span>{text}</span>
+    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    const parts = text.split(re)
+    return (
+      <>
+        {parts.map((p, i) =>
+          re.test(p)
+            ? <mark key={i} className="bg-primary/15 text-primary rounded-[2px] font-medium not-italic">{p}</mark>
+            : <span key={i}>{p}</span>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Selected pill OR search input */}
+      {selected ? (
+        <div className={cn(
+          'flex h-11 w-full items-center gap-2.5 rounded-md border bg-background px-3',
+          error ? 'border-destructive' : 'border-input',
+        )}>
+          {/* Avatar initials */}
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
+            {initials(selected)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              {selected.firstname} {selected.lastname}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">{selected.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleClear}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            aria-label="Effacer la sélection"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleKeyDown}
+            placeholder="Rechercher un client par nom ou e-mail…"
+            className={cn('h-11 pl-9 pr-3', error && 'border-destructive')}
+            autoComplete="off"
+          />
+          {loadingUsers && (
+            <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+        </div>
+      )}
+
+      {/* Dropdown */}
+      {open && !selected && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+          <ul
+            ref={listRef}
+            className="max-h-56 overflow-y-auto py-1"
+            role="listbox"
+          >
+            {filtered.length === 0 ? (
+              <li className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                <User size={14} className="opacity-50" />
+                {query ? 'Aucun client trouvé' : 'Aucun client enregistré'}
+              </li>
+            ) : (
+              filtered.map((u, idx) => (
+                <li
+                  key={u.userId}
+                  role="option"
+                  aria-selected={idx === highlighted}
+                  onMouseDown={e => { e.preventDefault(); handleSelect(u) }}
+                  onMouseEnter={() => setHighlighted(idx)}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2.5 px-3 py-2.5 text-sm',
+                    idx === highlighted ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+                  )}
+                >
+                  {/* Avatar */}
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                    {initials(u)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium leading-tight">
+                      {highlight(`${u.firstname} ${u.lastname}`)}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground leading-tight">
+                      {highlight(u.email)}
+                    </p>
+                  </div>
+                  {!u.isActive && (
+                    <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
+                      Inactif
+                    </span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
+
 // ── Send dialog ───────────────────────────────────────────────────────────────
 
 const sendSchema = z.object({
-  userId:  z.string().uuid('UUID invalide'),
+  userId:  z.string().uuid('Veuillez sélectionner un client'),
   subject: z.string().min(1, 'Objet requis').max(200),
   body:    z.string().min(1, 'Message requis').max(5000),
   type:    z.enum(['INFO', 'WARNING', 'DOCUMENT', 'APPROVAL', 'REJECTION'] as const),
@@ -57,10 +275,12 @@ function SendMessageDialog({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<SendForm>({
+  const { handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<SendForm>({
     resolver: zodResolver(sendSchema),
-    defaultValues: { type: 'INFO' },
+    defaultValues: { type: 'INFO', userId: '' },
   })
+
+  const userId = watch('userId')
 
   const mutation = useMutation({
     mutationFn: (data: SendForm) => api.post('/api/v1/admin/messages', data),
@@ -90,19 +310,19 @@ function SendMessageDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(d => mutation.mutate(d))} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="userId">ID du client (UUID)</Label>
-            <Input
-              id="userId"
-              {...register('userId')}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="h-11 font-mono text-sm"
+
+          {/* Client search */}
+          <div className="space-y-1.5">
+            <Label>Client destinataire</Label>
+            <UserSearchCombobox
+              value={userId}
+              onChange={id => setValue('userId', id, { shouldValidate: !!id })}
+              error={errors.userId?.message}
             />
-            {errors.userId && <p className="text-xs text-destructive">{errors.userId.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label>Type</Label>
               <Select defaultValue="INFO" onValueChange={v => setValue('type', v as SendForm['type'])}>
                 <SelectTrigger className="h-11">
@@ -116,16 +336,27 @@ function SendMessageDialog({
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="subject">Objet</Label>
-              <Input id="subject" {...register('subject')} placeholder="Objet du message" className="h-11" />
+              <Input
+                id="subject"
+                onChange={e => setValue('subject', e.target.value, { shouldValidate: true })}
+                placeholder="Objet du message"
+                className="h-11"
+              />
               {errors.subject && <p className="text-xs text-destructive">{errors.subject.message}</p>}
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="body">Message</Label>
-            <Textarea id="body" {...register('body')} rows={4} placeholder="Contenu du message…" className="resize-none" />
+            <Textarea
+              id="body"
+              onChange={e => setValue('body', e.target.value, { shouldValidate: true })}
+              rows={4}
+              placeholder="Contenu du message…"
+              className="resize-none"
+            />
             {errors.body && <p className="text-xs text-destructive">{errors.body.message}</p>}
           </div>
 
