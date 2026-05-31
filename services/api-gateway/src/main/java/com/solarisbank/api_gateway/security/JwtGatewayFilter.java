@@ -58,26 +58,29 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(7);
 
+        // Validate JWT — only wrap JWT-parsing code in the catch so that
+        // downstream proxy errors are never swallowed as "Token is invalid".
+        String userId;
+        String role;
         try {
             if (!jwtService.isTokenValid(token)) {
                 writeError(response, HttpStatus.UNAUTHORIZED, "Token is expired or invalid");
                 return;
             }
-
-            String userId = jwtService.extractUserId(token);
-            String role   = jwtService.extractRole(token);
-
-            // Block admin paths for non-admin users
-            if (path.startsWith(ADMIN_PATH_PREFIX) && !"ADMIN".equals(role)) {
-                writeError(response, HttpStatus.FORBIDDEN, "Access denied: admin only");
-                return;
-            }
-
-            filterChain.doFilter(new EnrichedRequestWrapper(request, userId, role), response);
-
+            userId = jwtService.extractUserId(token);
+            role   = jwtService.extractRole(token);
         } catch (Exception e) {
             writeError(response, HttpStatus.UNAUTHORIZED, "Token is invalid");
+            return;
         }
+
+        // Block admin paths for non-admin users
+        if (path.startsWith(ADMIN_PATH_PREFIX) && !"ADMIN".equals(role)) {
+            writeError(response, HttpStatus.FORBIDDEN, "Access denied: admin only");
+            return;
+        }
+
+        filterChain.doFilter(new EnrichedRequestWrapper(request, userId, role), response);
     }
 
     private void writeError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
