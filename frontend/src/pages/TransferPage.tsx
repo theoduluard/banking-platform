@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Account, Beneficiary } from '@/types'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
@@ -212,12 +212,10 @@ export default function TransferPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
-        <Link to="/dashboard">
-          <ArrowLeft size={14} />
-          <span>Retour</span>
-        </Link>
-      </Button>
+      <Link to="/dashboard" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2 gap-1.5 text-muted-foreground')}>
+        <ArrowLeft size={14} />
+        <span>Retour</span>
+      </Link>
 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Effectuer un virement</h1>
@@ -324,9 +322,9 @@ export default function TransferPage() {
                 <Card className="border-dashed">
                   <CardContent className="flex items-center justify-between py-3 px-4">
                     <p className="text-sm text-muted-foreground">Aucun bénéficiaire enregistré.</p>
-                    <Button size="sm" variant="outline" asChild className="gap-1.5 text-xs">
-                      <Link to="/beneficiaries">Ajouter</Link>
-                    </Button>
+                    <Link to="/beneficiaries" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5 text-xs')}>
+                      Ajouter
+                    </Link>
                   </CardContent>
                 </Card>
               ) : (

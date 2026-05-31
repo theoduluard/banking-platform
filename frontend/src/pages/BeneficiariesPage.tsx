@@ -8,7 +8,7 @@ import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Beneficiary } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -61,12 +61,13 @@ function BeneficiaryRow({
       </div>
 
       <div className="flex items-center gap-1.5">
-        <Button variant="ghost" size="sm" asChild className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-primary">
-          <Link to={`/transfer?iban=${b.iban}&name=${encodeURIComponent(b.name)}`}>
-            <ArrowLeftRight size={13} />
-            <span>Virer</span>
-          </Link>
-        </Button>
+        <Link
+          to={`/transfer?iban=${b.iban}&name=${encodeURIComponent(b.name)}`}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-primary')}
+        >
+          <ArrowLeftRight size={13} />
+          <span>Virer</span>
+        </Link>
         <Button
           variant="ghost"
           size="sm"

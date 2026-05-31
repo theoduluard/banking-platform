@@ -5,8 +5,9 @@ import api from '@/lib/api'
 import type { Account } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { PlusCircle, ArrowRight, ArrowLeftRight, CreditCard, PiggyBank, TrendingUp } from 'lucide-react'
 
 function formatAmount(amount: number, currency: string) {
@@ -63,17 +64,14 @@ function AccountCard({ account }: { account: Account }) {
               {formatAmount(account.balance, account.currency)}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-xs text-muted-foreground group-hover:text-primary"
-            asChild
-          >
-            <span>
-              Détails
-              <ArrowRight size={13} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
-            </span>
-          </Button>
+          {/* Span styled as ghost button — no asChild needed */}
+          <span className={cn(
+            buttonVariants({ variant: 'ghost', size: 'sm' }),
+            'gap-1.5 text-xs text-muted-foreground group-hover:text-primary pointer-events-none',
+          )}>
+            Détails
+            <ArrowRight size={13} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
+          </span>
         </CardContent>
       </Card>
     </Link>
@@ -123,20 +121,21 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button size="sm" variant="secondary" asChild
-              className="gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0">
-              <Link to="/transfer">
-                <ArrowLeftRight size={14} />
-                <span>Virer</span>
-              </Link>
-            </Button>
-            <Button size="sm" variant="secondary" asChild
-              className="gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0">
-              <Link to="/accounts/new">
-                <PlusCircle size={14} />
-                <span>Nouveau</span>
-              </Link>
-            </Button>
+            {/* Link styled directly as button — no asChild */}
+            <Link
+              to="/transfer"
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0')}
+            >
+              <ArrowLeftRight size={14} />
+              <span>Virer</span>
+            </Link>
+            <Link
+              to="/accounts/new"
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'gap-1.5 bg-white/15 text-white hover:bg-white/25 border-0')}
+            >
+              <PlusCircle size={14} />
+              <span>Nouveau</span>
+            </Link>
           </div>
         </div>
       </div>
@@ -145,12 +144,13 @@ export default function DashboardPage() {
       <div>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">Mes comptes</h2>
-          <Button variant="ghost" size="sm" asChild className="gap-1 text-xs text-muted-foreground">
-            <Link to="/accounts/new">
-              <PlusCircle size={13} />
-              <span>Ouvrir un compte</span>
-            </Link>
-          </Button>
+          <Link
+            to="/accounts/new"
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-1 text-xs text-muted-foreground')}
+          >
+            <PlusCircle size={13} />
+            <span>Ouvrir un compte</span>
+          </Link>
         </div>
 
         {isLoading && (
@@ -179,12 +179,13 @@ export default function DashboardPage() {
                 <p className="font-medium">Aucun compte pour l'instant</p>
                 <p className="mt-1 text-sm text-muted-foreground">Ouvrez votre premier compte en quelques secondes.</p>
               </div>
-              <Button asChild size="sm" className="gap-1.5">
-                <Link to="/accounts/new">
-                  <PlusCircle size={14} />
-                  <span>Ouvrir un compte</span>
-                </Link>
-              </Button>
+              <Link
+                to="/accounts/new"
+                className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
+              >
+                <PlusCircle size={14} />
+                <span>Ouvrir un compte</span>
+              </Link>
             </CardContent>
           </Card>
         )}

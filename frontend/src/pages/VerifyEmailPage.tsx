@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import api from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import Logo from '@/components/Logo'
 import { CheckCircle2, XCircle, Loader2, MailX } from 'lucide-react'
 
@@ -66,9 +67,9 @@ export default function VerifyEmailPage() {
                 Votre compte est activé. Vous pouvez maintenant vous connecter.
               </p>
             </div>
-            <Button asChild className="h-11 w-full">
-              <Link to="/login">Se connecter</Link>
-            </Button>
+            <Link to="/login" className={cn(buttonVariants(), 'h-11 w-full')}>
+              Se connecter
+            </Link>
           </div>
         )}
 
@@ -86,9 +87,9 @@ export default function VerifyEmailPage() {
                 Reconnectez-vous pour en recevoir un nouveau.
               </p>
             </div>
-            <Button asChild variant="outline" className="h-11 w-full">
-              <Link to="/login">Retour à la connexion</Link>
-            </Button>
+            <Link to="/login" className={cn(buttonVariants({ variant: 'outline' }), 'h-11 w-full')}>
+              Retour à la connexion
+            </Link>
           </div>
         )}
 
@@ -105,9 +106,9 @@ export default function VerifyEmailPage() {
                 Ce lien est invalide ou a déjà été utilisé.
               </p>
             </div>
-            <Button asChild variant="outline" className="h-11 w-full">
-              <Link to="/login">Retour à la connexion</Link>
-            </Button>
+            <Link to="/login" className={cn(buttonVariants({ variant: 'outline' }), 'h-11 w-full')}>
+              Retour à la connexion
+            </Link>
           </div>
         )}
 

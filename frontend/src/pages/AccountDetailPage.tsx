@@ -5,10 +5,11 @@ import api from '@/lib/api'
 import type { Account, Page, Transaction } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight, Clock, CreditCard, PiggyBank, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 
 function formatAmount(amount: number, currency: string) {
@@ -121,12 +122,10 @@ export default function AccountDetailPage() {
   return (
     <div className="space-y-6">
       {/* Back */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5 text-muted-foreground">
-        <Link to="/dashboard">
-          <ArrowLeft size={14} />
-          <span>Retour</span>
-        </Link>
-      </Button>
+      <Link to="/dashboard" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2 gap-1.5 text-muted-foreground')}>
+        <ArrowLeft size={14} />
+        <span>Retour</span>
+      </Link>
 
       {/* Account header */}
       {loadingAccount
@@ -160,13 +159,13 @@ export default function AccountDetailPage() {
                 <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[10px]">
                   {account.status === 'ACTIVE' ? 'Actif' : 'Fermé'}
                 </Badge>
-                <Button size="sm" variant="secondary" asChild
-                  className="mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0">
-                  <Link to="/transfer">
-                    <ArrowLeftRight size={13} />
-                    <span>Virer</span>
-                  </Link>
-                </Button>
+                <Link
+                  to="/transfer"
+                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0')}
+                >
+                  <ArrowLeftRight size={13} />
+                  <span>Virer</span>
+                </Link>
               </div>
             </div>
           </div>
