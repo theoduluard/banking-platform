@@ -29,6 +29,16 @@ services:
     ports:
       - "5435:5432"
 
+  postgres-messaging:
+    image: postgres:16
+    container_name: postgres-messaging
+    environment:
+      POSTGRES_DB: messaging_db
+      POSTGRES_USER: solaris
+      POSTGRES_PASSWORD: solaris123
+    ports:
+      - "5436:5432"
+
   kafka:
     image: apache/kafka:latest
     container_name: kafka

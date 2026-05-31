@@ -2,6 +2,7 @@ package com.solarisbank.account_service.controller;
 
 import com.solarisbank.account_service.dto.AccountResponse;
 import com.solarisbank.account_service.dto.CreditRequest;
+import com.solarisbank.account_service.dto.VerificationDocumentResponse;
 import com.solarisbank.account_service.exception.BusinessException;
 import com.solarisbank.account_service.model.Account;
 import com.solarisbank.account_service.repository.AccountRepository;
@@ -15,6 +16,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.UUID;
+
 /**
  * Admin endpoints for account management.
  * Access is gated at the API Gateway (X-User-Role=ADMIN).
@@ -27,6 +31,8 @@ public class AdminAccountController {
 
     private final AccountRepository accountRepository;
     private final AccountService accountService;
+
+    // ── All accounts (paginated) ───────────────────────────────────────────────
 
     @GetMapping
     public ResponseEntity<Page<AccountResponse>> getAllAccounts(
@@ -43,9 +49,50 @@ public class AdminAccountController {
         return ResponseEntity.ok(accounts);
     }
 
+    // ── Pending approvals ─────────────────────────────────────────────────────
+
+    @GetMapping("/pending")
+    public ResponseEntity<List<AccountResponse>> getPendingAccounts(
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.getPendingAccounts());
+    }
+
+    @PostMapping("/{id}/approve")
+    public ResponseEntity<AccountResponse> approveAccount(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.approveAccount(id));
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<AccountResponse> rejectAccount(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.rejectAccount(id));
+    }
+
+    // ── KYC documents ─────────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/documents")
+    public ResponseEntity<VerificationDocumentResponse> getDocuments(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Role") String userRole) {
+
+        requireAdmin(userRole);
+        return ResponseEntity.ok(accountService.getAccountDocuments(id));
+    }
+
+    // ── Status patch ──────────────────────────────────────────────────────────
+
     @PatchMapping("/{id}/status")
     public ResponseEntity<AccountResponse> updateAccountStatus(
-            @PathVariable java.util.UUID id,
+            @PathVariable UUID id,
             @RequestParam Account.Status status,
             @RequestHeader("X-User-Role") String userRole) {
 
@@ -60,9 +107,11 @@ public class AdminAccountController {
         return ResponseEntity.ok(toResponse(account));
     }
 
+    // ── Balance operations ────────────────────────────────────────────────────
+
     @PostMapping("/{id}/deposit")
     public ResponseEntity<AccountResponse> adminDeposit(
-            @PathVariable java.util.UUID id,
+            @PathVariable UUID id,
             @Valid @RequestBody CreditRequest request,
             @RequestHeader("X-User-Role") String userRole) {
 
@@ -72,13 +121,15 @@ public class AdminAccountController {
 
     @PostMapping("/{id}/withdrawal")
     public ResponseEntity<AccountResponse> adminWithdrawal(
-            @PathVariable java.util.UUID id,
+            @PathVariable UUID id,
             @Valid @RequestBody CreditRequest request,
             @RequestHeader("X-User-Role") String userRole) {
 
         requireAdmin(userRole);
         return ResponseEntity.ok(accountService.adminWithdrawal(id, request.getAmount()));
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void requireAdmin(String role) {
         if (!"ADMIN".equalsIgnoreCase(role)) {
@@ -89,6 +140,7 @@ public class AdminAccountController {
     private AccountResponse toResponse(Account account) {
         return AccountResponse.builder()
                 .id(account.getAccountId())
+                .userId(account.getUserId())
                 .iban(account.getIban())
                 .type(account.getType())
                 .balance(account.getBalance())

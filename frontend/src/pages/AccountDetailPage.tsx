@@ -156,16 +156,32 @@ export default function AccountDetailPage() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[10px]">
-                  {account.status === 'ACTIVE' ? 'Actif' : 'Fermé'}
+                <Badge variant="secondary" className="border-0 text-[10px] bg-white/20 text-white">
+                  {account.status === 'ACTIVE'            ? 'Actif'
+                   : account.status === 'PENDING_APPROVAL' ? 'En attente'
+                   : account.status === 'REJECTED'         ? 'Rejeté'
+                   : account.status === 'BLOCKED'           ? 'Bloqué'
+                   : 'Fermé'}
                 </Badge>
-                <Link
-                  to="/transfer"
-                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0')}
-                >
-                  <ArrowLeftRight size={13} />
-                  <span>Virer</span>
-                </Link>
+                {account.status === 'ACTIVE' && (
+                  <Link
+                    to="/transfer"
+                    className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0')}
+                  >
+                    <ArrowLeftRight size={13} />
+                    <span>Virer</span>
+                  </Link>
+                )}
+                {account.status === 'PENDING_APPROVAL' && (
+                  <p className="mt-auto text-[10px] text-white/60 text-right max-w-[110px] leading-tight">
+                    En attente de validation par l'équipe
+                  </p>
+                )}
+                {account.status === 'REJECTED' && (
+                  <p className="mt-auto text-[10px] text-white/60 text-right max-w-[110px] leading-tight">
+                    Demande refusée
+                  </p>
+                )}
               </div>
             </div>
           </div>

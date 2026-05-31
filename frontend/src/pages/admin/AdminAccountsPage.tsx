@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import api from '@/lib/api'
-import type { AdminAccount, AdminOperationRequest, Page } from '@/types'
+import type { AdminAccount, AdminOperationRequest, Page, VerificationDocumentResponse } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +21,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { CreditCard, PiggyBank, ArrowDownToLine, ArrowUpFromLine, AlertTriangle } from 'lucide-react'
+import {
+  CreditCard, PiggyBank, ArrowDownToLine, ArrowUpFromLine, AlertTriangle,
+  CheckCircle2, XCircle, FileImage, Clock, User,
+} from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,24 +34,26 @@ function formatAmount(n: number, currency: string) {
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(new Date(iso))
 }
-
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  ACTIVE:  { label: 'Actif',  className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  BLOCKED: { label: 'Bloqué', className: 'border-amber-200 bg-amber-50 text-amber-700' },
-  CLOSED:  { label: 'Fermé',  className: 'border-red-200 bg-red-50 text-red-700' },
+function formatDateTime(iso: string) {
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
 }
 
-// ── Dialog schema ─────────────────────────────────────────────────────────────
+const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  PENDING_APPROVAL: { label: 'En attente', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  ACTIVE:           { label: 'Actif',      className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  BLOCKED:          { label: 'Bloqué',     className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  CLOSED:           { label: 'Fermé',      className: 'border-red-200 bg-red-50 text-red-700' },
+  REJECTED:         { label: 'Rejeté',     className: 'border-red-200 bg-red-50 text-red-700' },
+}
+
+// ── Operation dialog ──────────────────────────────────────────────────────────
 
 const operationSchema = z.object({
   amount:      z.number({ message: 'Montant invalide' }).positive('Le montant doit être positif'),
   description: z.string().max(255, 'Maximum 255 caractères').optional(),
 })
 type OperationForm = z.infer<typeof operationSchema>
-
 type OperationType = 'deposit' | 'withdrawal'
-
-// ── Operation dialog ──────────────────────────────────────────────────────────
 
 function OperationDialog({
   account,
@@ -64,7 +69,6 @@ function OperationDialog({
   onSuccess: () => void
 }) {
   const isDeposit = type === 'deposit'
-  const color     = isDeposit ? 'emerald' : 'amber'
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<OperationForm>({
     resolver: zodResolver(operationSchema),
@@ -85,11 +89,7 @@ function OperationDialog({
   })
 
   function onSubmit(data: OperationForm) {
-    mutation.mutate({
-      accountId: account.id,
-      amount:    data.amount,
-      description: data.description,
-    })
+    mutation.mutate({ accountId: account.id, amount: data.amount, description: data.description })
   }
 
   function handleClose() {
@@ -113,14 +113,12 @@ function OperationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Current balance */}
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-center">
           <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Solde actuel</p>
           <p className="text-xl font-bold tabular-nums">{formatAmount(account.balance, account.currency)}</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Amount */}
           <div className="space-y-2">
             <Label htmlFor="amount">Montant</Label>
             <div className="relative">
@@ -140,7 +138,6 @@ function OperationDialog({
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="description">Motif</Label>
@@ -156,7 +153,6 @@ function OperationDialog({
             {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
           </div>
 
-          {/* Warning for withdrawal */}
           {!isDeposit && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
               <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
@@ -179,13 +175,96 @@ function OperationDialog({
                   : 'bg-amber-600 text-white hover:bg-amber-700'
               }`}
             >
-              {isDeposit
-                ? <ArrowDownToLine size={14} />
-                : <ArrowUpFromLine size={14} />}
+              {isDeposit ? <ArrowDownToLine size={14} /> : <ArrowUpFromLine size={14} />}
               <span>{isSubmitting ? 'Traitement…' : isDeposit ? 'Créditer' : 'Débiter'}</span>
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── KYC Documents dialog ──────────────────────────────────────────────────────
+
+function DocumentsDialog({
+  accountId,
+  open,
+  onClose,
+}: {
+  accountId: string | null
+  open: boolean
+  onClose: () => void
+}) {
+  const { data: docs, isLoading, isError } = useQuery<VerificationDocumentResponse>({
+    queryKey: ['admin', 'documents', accountId],
+    queryFn:  () => api.get<VerificationDocumentResponse>(`/api/v1/admin/accounts/${accountId}/documents`).then(r => r.data),
+    enabled:  !!accountId && open,
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileImage size={18} className="text-primary" />
+            Documents de vérification
+          </DialogTitle>
+          <DialogDescription>
+            Documents soumis par le client pour la vérification d'identité.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading && (
+          <div className="space-y-3">
+            <Skeleton className="h-48 w-full rounded-xl" />
+            <Skeleton className="h-48 w-full rounded-xl" />
+          </div>
+        )}
+
+        {isError && (
+          <div className="flex flex-col items-center gap-2 py-8 text-center text-muted-foreground">
+            <FileImage size={28} className="opacity-40" />
+            <p className="text-sm">Aucun document soumis pour ce compte.</p>
+          </div>
+        )}
+
+        {docs && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock size={12} />
+              <span>Soumis le {formatDateTime(docs.submittedAt)}</span>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selfie</p>
+                <img
+                  src={`data:${docs.selfieContentType};base64,${docs.selfieBase64}`}
+                  alt="Selfie"
+                  className="w-full rounded-xl border object-cover shadow-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Carte d'identité</p>
+                <img
+                  src={`data:${docs.idCardContentType};base64,${docs.idCardBase64}`}
+                  alt="Carte d'identité"
+                  className="w-full rounded-xl border object-cover shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <User size={12} />
+              <span>Utilisateur : <span className="font-mono">{docs.userId}</span></span>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fermer</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -198,12 +277,21 @@ export default function AdminAccountsPage() {
   const [page, setPage] = useState(0)
 
   // Operation dialog state
-  const [dialogAccount, setDialogAccount]  = useState<AdminAccount | null>(null)
-  const [dialogType,    setDialogType]     = useState<OperationType>('deposit')
+  const [dialogAccount, setDialogAccount] = useState<AdminAccount | null>(null)
+  const [dialogType,    setDialogType]    = useState<OperationType>('deposit')
+
+  // Documents dialog state
+  const [docsAccountId, setDocsAccountId] = useState<string | null>(null)
 
   const { data: accountsPage, isLoading } = useQuery<Page<AdminAccount>>({
     queryKey: ['admin', 'accounts', page],
     queryFn: () => api.get<Page<AdminAccount>>(`/api/v1/admin/accounts?page=${page}&size=20`).then(r => r.data),
+  })
+
+  const { data: pendingAccounts = [], isLoading: loadingPending } = useQuery<AdminAccount[]>({
+    queryKey: ['admin', 'accounts', 'pending'],
+    queryFn: () => api.get<AdminAccount[]>('/api/v1/admin/accounts/pending').then(r => r.data),
+    refetchInterval: 30_000,
   })
 
   const updateStatus = useMutation({
@@ -216,6 +304,24 @@ export default function AdminAccountsPage() {
     onError: () => toast.error('Impossible de mettre à jour le statut'),
   })
 
+  const approveAccount = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/admin/accounts/${id}/approve`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'accounts'] })
+      toast.success('Compte approuvé et activé')
+    },
+    onError: () => toast.error('Impossible d\'approuver le compte'),
+  })
+
+  const rejectAccount = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/admin/accounts/${id}/reject`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'accounts'] })
+      toast.success('Compte rejeté')
+    },
+    onError: () => toast.error('Impossible de rejeter le compte'),
+  })
+
   function openDialog(account: AdminAccount, type: OperationType) {
     setDialogAccount(account)
     setDialogType(type)
@@ -225,6 +331,8 @@ export default function AdminAccountsPage() {
     setDialogAccount(null)
     qc.invalidateQueries({ queryKey: ['admin', 'accounts'] })
   }
+
+  const isActionPending = approveAccount.isPending || rejectAccount.isPending || updateStatus.isPending
 
   return (
     <div className="space-y-6">
@@ -237,10 +345,106 @@ export default function AdminAccountsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Comptes</h1>
           <p className="text-sm text-muted-foreground">
             {accountsPage ? `${accountsPage.totalElements} compte${accountsPage.totalElements > 1 ? 's' : ''}` : '—'}
+            {pendingAccounts.length > 0 && (
+              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                {pendingAccounts.length} en attente
+              </span>
+            )}
           </p>
         </div>
       </div>
 
+      {/* ── Pending approvals ─────────────────────────────────────────────── */}
+      {(loadingPending || pendingAccounts.length > 0) && (
+        <Card className="border-amber-200">
+          <CardHeader className="border-b border-amber-200 bg-amber-50/60 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+              <Clock size={15} className="text-amber-600" />
+              En attente d'approbation
+              {!loadingPending && (
+                <span className="ml-auto rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-normal text-amber-800">
+                  {pendingAccounts.length}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loadingPending && (
+              <div className="space-y-3 p-4">
+                {[1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+              </div>
+            )}
+
+            {!loadingPending && pendingAccounts.length === 0 && (
+              <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                <CheckCircle2 size={16} className="text-emerald-500" />
+                Aucune demande en attente.
+              </div>
+            )}
+
+            {!loadingPending && pendingAccounts.length > 0 && (
+              <div className="divide-y divide-border">
+                {pendingAccounts.map(a => {
+                  const isChecking = a.type === 'CHECKING'
+                  return (
+                    <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+                      {/* Icon */}
+                      <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                        isChecking ? 'bg-primary/10 text-primary' : 'bg-[oklch(0.78_0.145_82)]/20 text-[oklch(0.50_0.14_82)]'
+                      }`}>
+                        {isChecking ? <CreditCard size={15} /> : <PiggyBank size={15} />}
+                      </div>
+
+                      {/* Info */}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-sm font-medium">{a.iban}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isChecking ? 'Courant' : 'Épargne'} · <span className="font-mono">{a.userId?.slice(0, 8)}…</span> · {formatDate(a.createdAt)}
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground"
+                          onClick={() => setDocsAccountId(a.id)}
+                        >
+                          <FileImage size={13} />
+                          <span>Documents</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 px-2.5 text-xs text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => approveAccount.mutate(a.id)}
+                          disabled={isActionPending}
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>Approuver</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 px-2.5 text-xs text-red-700 hover:bg-red-50"
+                          onClick={() => rejectAccount.mutate(a.id)}
+                          disabled={isActionPending}
+                        >
+                          <XCircle size={13} />
+                          <span>Rejeter</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── All accounts ──────────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="border-b pb-4">
           <CardTitle className="text-sm font-semibold">Tous les comptes</CardTitle>
@@ -261,7 +465,7 @@ export default function AdminAccountsPage() {
                     {accountsPage.content.map(a => {
                       const isChecking = a.type === 'CHECKING'
                       const statusInfo = STATUS_LABELS[a.status] ?? STATUS_LABELS.ACTIVE
-                      const canAdjust  = a.status !== 'CLOSED'
+                      const canAdjust  = a.status !== 'CLOSED' && a.status !== 'PENDING_APPROVAL' && a.status !== 'REJECTED'
                       return (
                         <div key={a.id} className="flex items-center gap-3 px-4 py-3.5">
                           {/* Icon */}
@@ -273,7 +477,7 @@ export default function AdminAccountsPage() {
 
                           {/* Info */}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium font-mono">{a.iban}</p>
+                            <p className="truncate font-mono text-sm font-medium">{a.iban}</p>
                             <p className="text-xs text-muted-foreground">
                               {isChecking ? 'Courant' : 'Épargne'} · créé le {formatDate(a.createdAt)}
                             </p>
@@ -378,6 +582,13 @@ export default function AdminAccountsPage() {
           onSuccess={handleOperationSuccess}
         />
       )}
+
+      {/* KYC Documents dialog */}
+      <DocumentsDialog
+        accountId={docsAccountId}
+        open={!!docsAccountId}
+        onClose={() => setDocsAccountId(null)}
+      />
     </div>
   )
 }

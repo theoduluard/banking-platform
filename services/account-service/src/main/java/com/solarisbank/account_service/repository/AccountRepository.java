@@ -14,4 +14,6 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     boolean existsByIban(String iban);
     Optional<Account> findByIban(String iban);
     Optional<Account> findByAccountIdAndUserId(UUID id, UUID userId);
+    List<Account> findByStatus(Account.Status status);
+    long countByUserId(UUID userId);
 }

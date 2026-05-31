@@ -15,11 +15,15 @@ import AccountDetailPage from '@/pages/AccountDetailPage'
 import NewAccountPage    from '@/pages/NewAccountPage'
 import TransferPage       from '@/pages/TransferPage'
 import BeneficiariesPage  from '@/pages/BeneficiariesPage'
+import MessagesPage       from '@/pages/MessagesPage'
+import RequestsPage       from '@/pages/RequestsPage'
 
 import AdminDashboardPage    from '@/pages/admin/AdminDashboardPage'
 import AdminUsersPage        from '@/pages/admin/AdminUsersPage'
 import AdminAccountsPage     from '@/pages/admin/AdminAccountsPage'
 import AdminTransactionsPage from '@/pages/admin/AdminTransactionsPage'
+import AdminMessagesPage     from '@/pages/admin/AdminMessagesPage'
+import AdminRequestsPage     from '@/pages/admin/AdminRequestsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,6 +51,8 @@ export default function App() {
             <Route path="/accounts/:id" element={<AccountDetailPage />} />
             <Route path="/transfer"       element={<TransferPage />} />
             <Route path="/beneficiaries" element={<BeneficiariesPage />} />
+            <Route path="/messages"      element={<MessagesPage />} />
+            <Route path="/requests"      element={<RequestsPage />} />
           </Route>
 
           {/* Admin — ADMIN role required, own sidebar layout */}
@@ -55,6 +61,8 @@ export default function App() {
             <Route path="/admin/users"        element={<AdminUsersPage />} />
             <Route path="/admin/accounts"     element={<AdminAccountsPage />} />
             <Route path="/admin/transactions" element={<AdminTransactionsPage />} />
+            <Route path="/admin/messages"     element={<AdminMessagesPage />} />
+            <Route path="/admin/requests"     element={<AdminRequestsPage />} />
           </Route>
 
           {/* Default redirect */}

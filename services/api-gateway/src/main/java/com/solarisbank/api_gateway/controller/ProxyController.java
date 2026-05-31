@@ -27,6 +27,9 @@ public class ProxyController {
     @Value("${transaction.service.url:http://localhost:8083}")
     private String transactionServiceUrl;
 
+    @Value("${messaging.service.url:http://localhost:8084}")
+    private String messagingServiceUrl;
+
     @RequestMapping("/api/v1/auth/**")
     public ResponseEntity<byte[]> proxyAuth(
             HttpServletRequest request,
@@ -55,6 +58,20 @@ public class ProxyController {
         return forward(request, body, transactionServiceUrl);
     }
 
+    @RequestMapping("/api/v1/messages/**")
+    public ResponseEntity<byte[]> proxyMessages(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, messagingServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/requests/**")
+    public ResponseEntity<byte[]> proxyRequests(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, messagingServiceUrl);
+    }
+
     // ── Admin routes (gateway already enforced ADMIN role) ────────────────────
 
     @RequestMapping("/api/v1/admin/users/**")
@@ -69,6 +86,20 @@ public class ProxyController {
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
         return forward(request, body, accountServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/messages/**")
+    public ResponseEntity<byte[]> proxyAdminMessages(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, messagingServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/requests/**")
+    public ResponseEntity<byte[]> proxyAdminRequests(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, messagingServiceUrl);
     }
 
     @RequestMapping("/api/v1/admin/transactions/**")

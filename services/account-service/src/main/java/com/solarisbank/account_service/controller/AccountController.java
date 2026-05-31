@@ -2,6 +2,7 @@ package com.solarisbank.account_service.controller;
 
 import com.solarisbank.account_service.dto.AccountResponse;
 import com.solarisbank.account_service.dto.CreateAccountRequest;
+import com.solarisbank.account_service.dto.VerificationDocumentRequest;
 import com.solarisbank.account_service.model.Account;
 import com.solarisbank.account_service.service.AccountService;
 import jakarta.validation.Valid;
@@ -67,6 +68,20 @@ public class AccountController {
         return accountService.findByIban(iban)
                 .map(acc -> ResponseEntity.ok(Map.of("accountId", acc.getAccountId().toString())))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Submits KYC documents (selfie + ID card) for a pending account.
+     * Required for first account creation before admin can approve.
+     */
+    @PostMapping("/{id}/documents")
+    public ResponseEntity<Void> submitDocuments(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Id") UUID userId,
+            @Valid @RequestBody VerificationDocumentRequest request) {
+
+        accountService.submitDocuments(id, userId, request);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/debit")

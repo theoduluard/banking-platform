@@ -24,7 +24,7 @@ export interface AuthResponse {
 // ── Account ───────────────────────────────────────────────────────────────────
 
 export type AccountType = 'CHECKING' | 'SAVINGS'
-export type AccountStatus = 'ACTIVE' | 'CLOSED'
+export type AccountStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'BLOCKED' | 'CLOSED' | 'REJECTED'
 
 export interface Account {
   id: string
@@ -111,16 +111,80 @@ export interface AdminUser {
   createdAt: string
 }
 
-export type AccountStatusAdmin = 'ACTIVE' | 'BLOCKED' | 'CLOSED'
+export type AccountStatusAdmin = 'PENDING_APPROVAL' | 'ACTIVE' | 'BLOCKED' | 'CLOSED' | 'REJECTED'
 
 export interface AdminAccount {
   id: string
+  userId: string
   iban: string
   type: AccountType
   balance: number
   currency: string
   status: AccountStatusAdmin
   createdAt: string
+}
+
+// ── Messaging ─────────────────────────────────────────────────────────────────
+
+export type MessageType = 'INFO' | 'WARNING' | 'DOCUMENT' | 'APPROVAL' | 'REJECTION'
+
+export interface Message {
+  id: string
+  userId: string
+  subject: string
+  body: string
+  type: MessageType
+  isRead: boolean
+  attachmentBase64?: string | null
+  attachmentContentType?: string | null
+  attachmentFilename?: string | null
+  createdAt: string
+}
+
+export type RequestType = 'ACCOUNT_CLOSURE' | 'DISPUTE' | 'DOCUMENT_REQUEST' | 'OTHER'
+export type RequestStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED'
+
+export interface SupportRequest {
+  id: string
+  userId: string
+  type: RequestType
+  subject: string
+  body: string
+  status: RequestStatus
+  hasAttachment: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReplyAuthorType = 'CLIENT' | 'ADMIN'
+
+export interface RequestReply {
+  id: string
+  authorType: ReplyAuthorType
+  authorId: string
+  body: string
+  attachmentBase64?: string | null
+  attachmentContentType?: string | null
+  attachmentFilename?: string | null
+  createdAt: string
+}
+
+export interface SupportRequestDetail extends SupportRequest {
+  attachmentBase64?: string | null
+  attachmentContentType?: string | null
+  attachmentFilename?: string | null
+  replies: RequestReply[]
+}
+
+export interface VerificationDocumentResponse {
+  id: string
+  accountId: string
+  userId: string
+  selfieBase64: string
+  selfieContentType: string
+  idCardBase64: string
+  idCardContentType: string
+  submittedAt: string
 }
 
 export interface AdminTransaction {

@@ -12,6 +12,7 @@ import java.util.UUID;
 @Builder
 public class AccountResponse {
     private UUID id;
+    private UUID userId;
     private String iban;
     private Account.Type type;
     private BigDecimal balance;

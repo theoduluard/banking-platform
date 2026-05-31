@@ -49,10 +49,19 @@ function AccountCard({ account }: { account: Account }) {
               </div>
             </div>
             <Badge
-              variant={account.status === 'ACTIVE' ? 'default' : 'secondary'}
-              className="text-[10px]"
+              variant="secondary"
+              className={cn('text-[10px] border', {
+                'bg-emerald-50 text-emerald-700 border-emerald-200': account.status === 'ACTIVE',
+                'bg-amber-50 text-amber-700 border-amber-200':       account.status === 'PENDING_APPROVAL',
+                'bg-red-50 text-red-700 border-red-200':             account.status === 'REJECTED',
+                'bg-muted text-muted-foreground border-border':      account.status === 'CLOSED' || account.status === 'BLOCKED',
+              })}
             >
-              {account.status === 'ACTIVE' ? 'Actif' : 'Fermé'}
+              {account.status === 'ACTIVE'           ? 'Actif'
+               : account.status === 'PENDING_APPROVAL' ? 'En attente'
+               : account.status === 'REJECTED'         ? 'Rejeté'
+               : account.status === 'BLOCKED'           ? 'Bloqué'
+               : 'Fermé'}
             </Badge>
           </div>
         </CardHeader>
@@ -89,9 +98,10 @@ export default function DashboardPage() {
     enabled: !!userId,
   })
 
-  const activeAccounts = accounts?.filter(a => a.status === 'ACTIVE') ?? []
-  const totalBalance   = activeAccounts.reduce((sum, a) => sum + a.balance, 0)
-  const currency       = accounts?.[0]?.currency ?? 'EUR'
+  const activeAccounts  = accounts?.filter(a => a.status === 'ACTIVE') ?? []
+  const pendingAccounts = accounts?.filter(a => a.status === 'PENDING_APPROVAL') ?? []
+  const totalBalance    = activeAccounts.reduce((sum, a) => sum + a.balance, 0)
+  const currency        = accounts?.[0]?.currency ?? 'EUR'
 
   return (
     <div className="space-y-8">
@@ -117,6 +127,11 @@ export default function DashboardPage() {
             }
             <p className="mt-2 text-xs text-primary-foreground/50">
               {activeAccounts.length} compte{activeAccounts.length > 1 ? 's' : ''} actif{activeAccounts.length > 1 ? 's' : ''}
+              {pendingAccounts.length > 0 && (
+                <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-white/80">
+                  {pendingAccounts.length} en attente
+                </span>
+              )}
             </p>
           </div>
 

@@ -3,6 +3,8 @@ package com.solarisbank.account_service.kafka.producer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solarisbank.account_service.kafka.config.KafkaTopicConfig;
+import com.solarisbank.account_service.kafka.event.AccountApprovedEvent;
+import com.solarisbank.account_service.kafka.event.AccountRejectedEvent;
 import com.solarisbank.account_service.kafka.event.CreditResultEvent;
 import com.solarisbank.account_service.kafka.event.DebitResultEvent;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,16 @@ public class AccountEventProducer {
     public void publishCreditResult(CreditResultEvent event) {
         send(KafkaTopicConfig.TOPIC_CREDIT_RESULT, event.getTransactionId().toString(), event);
         log.info("Published CreditResult [success={}] for transaction {}", event.isSuccess(), event.getTransactionId());
+    }
+
+    public void publishAccountApproved(AccountApprovedEvent event) {
+        send(KafkaTopicConfig.TOPIC_ACCOUNT_APPROVED, event.getAccountId().toString(), event);
+        log.info("Published AccountApproved for account {}", event.getAccountId());
+    }
+
+    public void publishAccountRejected(AccountRejectedEvent event) {
+        send(KafkaTopicConfig.TOPIC_ACCOUNT_REJECTED, event.getAccountId().toString(), event);
+        log.info("Published AccountRejected for account {}", event.getAccountId());
     }
 
     private void send(String topic, String key, Object payload) {

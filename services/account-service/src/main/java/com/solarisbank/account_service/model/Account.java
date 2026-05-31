@@ -18,7 +18,7 @@ import java.util.UUID;
 @Table(name = "accounts")
 public class Account {
     public enum Type { CHECKING, SAVINGS }
-    public enum Status { ACTIVE, BLOCKED, CLOSED }
+    public enum Status { PENDING_APPROVAL, ACTIVE, BLOCKED, CLOSED, REJECTED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -51,7 +51,7 @@ public class Account {
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
         this.balance = BigDecimal.ZERO;
-        this.status = Status.ACTIVE;
+        this.status = Status.PENDING_APPROVAL;
         this.currency = "EUR";
     }
 }

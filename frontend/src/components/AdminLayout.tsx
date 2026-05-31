@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   BarChart2,
   ExternalLink,
+  Bell,
+  MessageSquare,
 } from 'lucide-react'
 
 const sidebarLinks = [
@@ -19,6 +21,8 @@ const sidebarLinks = [
   { to: '/admin/users',        label: 'Utilisateurs',    icon: Users },
   { to: '/admin/accounts',     label: 'Comptes',         icon: CreditCard },
   { to: '/admin/transactions', label: 'Transactions',    icon: ArrowLeftRight },
+  { to: '/admin/messages',     label: 'Messages',        icon: Bell },
+  { to: '/admin/requests',     label: 'Demandes',        icon: MessageSquare },
 ]
 
 export default function AdminLayout() {
