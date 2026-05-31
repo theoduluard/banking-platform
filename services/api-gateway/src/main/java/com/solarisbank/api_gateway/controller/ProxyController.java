@@ -142,9 +142,12 @@ public class ProxyController {
                     headers.addAll(key, values);
                 }
             });
+            // res.getBody() is null for 204 No Content — guard against NPE
+            var bodyStream = res.getBody();
+            byte[] bodyBytes = (bodyStream != null) ? bodyStream.readAllBytes() : new byte[0];
             return ResponseEntity.status(res.getStatusCode())
                     .headers(headers)
-                    .body(res.getBody().readAllBytes());
+                    .body(bodyBytes);
         });
     }
 }
