@@ -59,6 +59,8 @@ jobs:
             dir: services/account-service
           - service: transaction-service
             dir: services/transaction-service
+          - service: messaging-service
+            dir: services/messaging-service
           - service: api-gateway
             dir: services/api-gateway
           - service: frontend
