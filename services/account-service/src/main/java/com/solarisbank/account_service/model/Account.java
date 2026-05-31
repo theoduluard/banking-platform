@@ -41,7 +41,7 @@ public class Account {
     private String currency;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "VARCHAR(255)")
     private Status status;
 
     @Column(nullable = false)
