@@ -5,9 +5,11 @@ import com.solarisbank.account_service.dto.CreateAccountRequest;
 import com.solarisbank.account_service.dto.VerificationDocumentRequest;
 import com.solarisbank.account_service.model.Account;
 import java.util.HashMap;
+import com.solarisbank.account_service.exception.BusinessException;
 import com.solarisbank.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,6 +26,10 @@ import java.util.UUID;
 public class AccountController {
 
     private final AccountService accountService;
+
+    // Fix 11: used to restrict the /credit endpoint to internal service-to-service calls only.
+    @Value("${internal.secret}")
+    private String internalSecret;
 
     @PostMapping
     public ResponseEntity<AccountResponse> create(
@@ -106,11 +112,25 @@ public class AccountController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Fix 11: /credit is an internal endpoint called only by transaction-service.
+     * Unlike /debit (which is ownership-checked via X-User-Id + findByAccountIdAndUserId),
+     * /credit performs no ownership validation — any authenticated user reaching it could
+     * credit any account arbitrarily.
+     *
+     * Mitigation: require the X-Internal-Secret header, which is only known to backend services.
+     * A regular JWT user routed through the api-gateway carries a valid X-User-Id but NOT
+     * the internal secret, so they cannot reach this endpoint.
+     */
     @PostMapping("/{id}/credit")
     public ResponseEntity<Void> credit(
             @PathVariable UUID id,
-            @RequestBody Map<String, BigDecimal> body) {
+            @RequestBody Map<String, BigDecimal> body,
+            @RequestHeader(value = "X-Internal-Secret", required = false) String providedSecret) {
 
+        if (!internalSecret.equals(providedSecret)) {
+            throw new BusinessException("Unauthorized — internal endpoint", HttpStatus.UNAUTHORIZED);
+        }
         accountService.credit(id, body.get("amount"));
         return ResponseEntity.noContent().build();
     }

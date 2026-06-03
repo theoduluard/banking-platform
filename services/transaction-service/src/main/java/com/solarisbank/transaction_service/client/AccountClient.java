@@ -19,9 +19,13 @@ public class AccountClient {
 
     public AccountClient(
             @Value("${account.service.url}") String accountServiceUrl,
+            @Value("${internal.secret}") String internalSecret,
             ObjectMapper objectMapper) {
         this.restClient = RestClient.builder()
                 .baseUrl(accountServiceUrl)
+                // Authenticate all service-to-service calls with the shared internal secret.
+                // account-service's InternalRequestFilter validates this header.
+                .defaultHeader("X-Internal-Secret", internalSecret)
                 // Convert 4xx/5xx responses from account-service into BusinessException
                 // so they propagate cleanly through the transaction-service error handlers.
                 .defaultStatusHandler(

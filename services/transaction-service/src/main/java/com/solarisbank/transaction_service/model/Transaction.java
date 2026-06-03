@@ -19,7 +19,7 @@ import java.util.UUID;
 public class Transaction {
 
     public enum Type   { TRANSFER, DEPOSIT, WITHDRAWAL }
-    public enum Status { PENDING, COMPLETED, FAILED, CANCELLED }
+    public enum Status { PENDING, DEBIT_CONFIRMED, COMPLETED, FAILED, CANCELLED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

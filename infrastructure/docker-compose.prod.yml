@@ -7,6 +7,7 @@
 #   JWT_REFRESH_EXPIRATION=604800000
 #   ADMIN_EMAIL=<admin_email>
 #   ADMIN_PASSWORD=<strong_admin_password>
+#   INTERNAL_SECRET=<random_secret_for_inter_service_calls>
 #
 # Traffic flow:
 #   Internet → router NAT → NPM sur NAS (TLS via Let's Encrypt)
@@ -144,6 +145,7 @@ services:
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET:                    ${JWT_SECRET}
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
     networks:
       - banking-net
@@ -163,6 +165,7 @@ services:
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL:           http://account-service:8082
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
     networks:
       - banking-net
@@ -199,6 +202,7 @@ services:
       SPRING_DATASOURCE_USERNAME:     solaris
       SPRING_DATASOURCE_PASSWORD:     ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:                ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO:  create-drop
     networks:
       - banking-net

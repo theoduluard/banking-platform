@@ -31,6 +31,7 @@ public class TransactionService {
     private final AccountClient accountClient;
     private final SagaEventProducer sagaEventProducer;
 
+    @Transactional
     public TransactionResponse transfer(UUID userId, TransferRequest request, String idempotencyKey) {
 
         // ── Idempotency check ──────────────────────────────────────────────────
@@ -114,12 +115,14 @@ public class TransactionService {
     /**
      * Admin deposit: credit the target account and record a DEPOSIT transaction.
      * Synchronous — no Kafka saga. The balance is updated immediately.
+     *
+     * Order: save the audit record first (inside @Transactional), then call account-service.
+     * If the account-service call throws, @Transactional rolls back the audit record,
+     * leaving the DB clean. The residual risk (DB commit fails after REST succeeds) is
+     * extremely unlikely in practice and far less common than the inverse.
      */
+    @Transactional
     public TransactionResponse adminDeposit(UUID adminId, AdminOperationRequest request) {
-        // Adjust balance first — throws BusinessException on any account-service error.
-        accountClient.adminDeposit(request.getAccountId(), request.getAmount());
-
-        // Save completed audit record.
         Transaction tx = transactionRepository.save(Transaction.builder()
                 .fromAccountId(SYSTEM_ACCOUNT_ID)
                 .toAccountId(request.getAccountId())
@@ -131,6 +134,9 @@ public class TransactionService {
                 .completedAt(LocalDateTime.now())
                 .build());
 
+        // If this throws, @Transactional rolls back the audit record above
+        accountClient.adminDeposit(request.getAccountId(), request.getAmount());
+
         log.info("[Admin] Deposit {} EUR on account {} by admin {}",
                 request.getAmount(), request.getAccountId(), adminId);
         return toResponse(tx);
@@ -139,10 +145,10 @@ public class TransactionService {
     /**
      * Admin withdrawal: debit the target account and record a WITHDRAWAL transaction.
      * Synchronous — no Kafka saga. The balance is updated immediately.
+     * Same ordering strategy as adminDeposit.
      */
+    @Transactional
     public TransactionResponse adminWithdrawal(UUID adminId, AdminOperationRequest request) {
-        accountClient.adminWithdrawal(request.getAccountId(), request.getAmount());
-
         Transaction tx = transactionRepository.save(Transaction.builder()
                 .fromAccountId(request.getAccountId())
                 .toAccountId(SYSTEM_ACCOUNT_ID)
@@ -153,6 +159,9 @@ public class TransactionService {
                 .status(Transaction.Status.COMPLETED)
                 .completedAt(LocalDateTime.now())
                 .build());
+
+        // If this throws, @Transactional rolls back the audit record above
+        accountClient.adminWithdrawal(request.getAccountId(), request.getAmount());
 
         log.info("[Admin] Withdrawal {} EUR from account {} by admin {}",
                 request.getAmount(), request.getAccountId(), adminId);

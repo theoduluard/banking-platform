@@ -10,10 +10,13 @@ import com.solarisbank.account_service.kafka.event.AccountRejectedEvent;
 import com.solarisbank.account_service.kafka.producer.AccountEventProducer;
 import com.solarisbank.account_service.model.Account;
 import com.solarisbank.account_service.model.VerificationDocument;
+import com.solarisbank.account_service.model.ProcessedSagaEvent;
 import com.solarisbank.account_service.repository.AccountRepository;
+import com.solarisbank.account_service.repository.ProcessedSagaEventRepository;
 import com.solarisbank.account_service.repository.VerificationDocumentRepository;
 import com.solarisbank.account_service.util.IbanGenerator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +28,14 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AccountService {
 
     private final AccountRepository accountRepository;
     private final VerificationDocumentRepository documentRepository;
     private final IbanGenerator ibanGenerator;
     private final AccountEventProducer eventProducer;
+    private final ProcessedSagaEventRepository processedEventRepository;
 
     public AccountResponse create(UUID userId, CreateAccountRequest request) {
         String iban;
@@ -172,9 +177,15 @@ public class AccountService {
 
     // ── Transfers ──────────────────────────────────────────────────────────────
 
+    /**
+     * Debits a user's account (ownership-checked).
+     * Uses a pessimistic write lock to prevent concurrent overdraft.
+     * Called directly from AccountController (synchronous REST) and from debitFromSaga.
+     */
     @Transactional
     public void debit(UUID accountId, UUID userId, BigDecimal amount) {
-        Account account = accountRepository.findByAccountIdAndUserId(accountId, userId)
+        // SELECT … FOR UPDATE — blocks concurrent debit/credit on the same row
+        Account account = accountRepository.findWithLockByAccountIdAndUserId(accountId, userId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
         if (account.getStatus() != Account.Status.ACTIVE) {
@@ -188,9 +199,41 @@ public class AccountService {
         accountRepository.save(account);
     }
 
+    /**
+     * Saga-aware debit: idempotent version called from the Kafka consumer.
+     * Saves a ProcessedSagaEvent atomically with the balance update so that a
+     * redelivered DebitRequested message is detected and skipped without touching
+     * the balance a second time.
+     *
+     * Fix 13: delegates to debit() instead of duplicating its logic. Both methods
+     * share the same @Transactional context (PROPAGATION.REQUIRED), so the
+     * pessimistic lock acquired inside debit() is part of this transaction.
+     * Any future changes to debit() (new business rules, fraud checks, etc.)
+     * are automatically applied to the saga path too.
+     */
+    @Transactional
+    public void debitFromSaga(UUID transactionId, UUID accountId, UUID userId, BigDecimal amount) {
+        if (processedEventRepository.existsByTransactionIdAndEventType(transactionId, "DEBIT")) {
+            log.info("[Idempotency] DEBIT for transaction {} already processed — skipping", transactionId);
+            return;
+        }
+        // All business rules (pessimistic lock, ACTIVE check, balance check) are in debit()
+        debit(accountId, userId, amount);
+
+        // Idempotency marker — committed atomically with the balance update
+        processedEventRepository.save(ProcessedSagaEvent.builder()
+                .transactionId(transactionId)
+                .eventType("DEBIT")
+                .build());
+    }
+
+    /**
+     * Credits an account (no ownership check — used for saga credit and REST compensation).
+     * Uses a pessimistic write lock.
+     */
     @Transactional
     public void credit(UUID accountId, BigDecimal amount) {
-        Account account = accountRepository.findById(accountId)
+        Account account = accountRepository.findWithLockById(accountId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
         if (account.getStatus() != Account.Status.ACTIVE) {
@@ -199,6 +242,27 @@ public class AccountService {
 
         account.setBalance(account.getBalance().add(amount));
         accountRepository.save(account);
+    }
+
+    /**
+     * Saga-aware credit: idempotent version called from the Kafka consumer.
+     * Saves a ProcessedSagaEvent atomically with the balance update.
+     *
+     * Fix 13: delegates to credit() for the same reason as debitFromSaga().
+     */
+    @Transactional
+    public void creditFromSaga(UUID transactionId, UUID accountId, BigDecimal amount) {
+        if (processedEventRepository.existsByTransactionIdAndEventType(transactionId, "CREDIT")) {
+            log.info("[Idempotency] CREDIT for transaction {} already processed — skipping", transactionId);
+            return;
+        }
+        // All business rules (pessimistic lock, ACTIVE check) are in credit()
+        credit(accountId, amount);
+
+        processedEventRepository.save(ProcessedSagaEvent.builder()
+                .transactionId(transactionId)
+                .eventType("CREDIT")
+                .build());
     }
 
     /** Used by the IBAN-lookup endpoint — returns the raw entity to avoid over-exposure. */
@@ -210,11 +274,15 @@ public class AccountService {
 
     @Transactional
     public AccountResponse adminDeposit(UUID accountId, BigDecimal amount) {
-        Account account = accountRepository.findById(accountId)
+        // Fix 10: use pessimistic write lock — concurrent admin deposits on the same
+        // account could otherwise both read the same balance and produce a lost update.
+        Account account = accountRepository.findWithLockById(accountId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
-        if (account.getStatus() == Account.Status.CLOSED) {
-            throw new BusinessException("Cannot credit a closed account", HttpStatus.METHOD_NOT_ALLOWED);
+        // Fix 12: require ACTIVE (not just !CLOSED) — prevents depositing into
+        // PENDING_APPROVAL or REJECTED accounts, which should not hold real balances.
+        if (account.getStatus() != Account.Status.ACTIVE) {
+            throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         account.setBalance(account.getBalance().add(amount));
@@ -223,11 +291,13 @@ public class AccountService {
 
     @Transactional
     public AccountResponse adminWithdrawal(UUID accountId, BigDecimal amount) {
-        Account account = accountRepository.findById(accountId)
+        // Fix 10: pessimistic write lock — same rationale as adminDeposit.
+        Account account = accountRepository.findWithLockById(accountId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
-        if (account.getStatus() == Account.Status.CLOSED) {
-            throw new BusinessException("Cannot debit a closed account", HttpStatus.METHOD_NOT_ALLOWED);
+        // Fix 12: require ACTIVE.
+        if (account.getStatus() != Account.Status.ACTIVE) {
+            throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }
         if (account.getBalance().compareTo(amount) < 0) {
             throw new BusinessException("Insufficient funds", HttpStatus.METHOD_NOT_ALLOWED);
