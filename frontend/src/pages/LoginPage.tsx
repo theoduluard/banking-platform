@@ -21,9 +21,9 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 const features = [
-  { icon: ShieldCheck, title: 'Sécurité bancaire',   desc: 'Chiffrement JWT + HTTPS bout en bout' },
-  { icon: TrendingUp,  title: 'Virements en temps réel', desc: 'Saga Kafka — traitement asynchrone fiable' },
-  { icon: Zap,         title: 'Accès instantané',    desc: 'Tableau de bord clair, actions rapides' },
+  { icon: ShieldCheck, title: 'Sécurité bancaire',       desc: 'Chiffrement de bout en bout, authentification forte' },
+  { icon: TrendingUp,  title: 'Virements en temps réel', desc: 'Transactions rapides, confirmées en quelques secondes' },
+  { icon: Zap,         title: 'Accès instantané',        desc: 'Toutes vos finances en un coup d\'œil' },
 ]
 
 export default function LoginPage() {
@@ -94,13 +94,16 @@ export default function LoginPage() {
     <div className="flex min-h-screen">
 
       {/* ── Brand panel ─────────────────────────────────────────────────────── */}
-      <div className="relative hidden w-2/5 flex-col justify-between overflow-hidden bg-primary p-10 lg:flex">
-        {/* Subtle background decoration */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/5" />
-          <div className="absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-white/5" />
-          <div className="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5" />
-        </div>
+      <div
+        className="relative hidden w-2/5 flex-col justify-between overflow-hidden p-10 lg:flex"
+        style={{
+          backgroundImage: 'url(https://images.unsplash.com/photo-1470770841072-f978cf4d019e?q=80&w=1000&auto=format&fit=crop)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        {/* Dark overlay for text readability */}
+        <div className="pointer-events-none absolute inset-0 bg-black/55" />
 
         <Logo size={38} className="relative z-10 [&_span]:text-white [&_span:last-child]:text-white/60" />
 
@@ -110,7 +113,7 @@ export default function LoginPage() {
               Gérez votre argent<br />en toute confiance.
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-white/60">
-              Solaris Bank — infrastructure bancaire moderne, sécurisée, et pensée pour les développeurs.
+              Solaris Bank — votre banque en ligne, simple, moderne et sécurisée.
             </p>
           </div>
 
@@ -130,7 +133,7 @@ export default function LoginPage() {
         </div>
 
         <p className="relative z-10 text-xs text-white/30">
-          © {new Date().getFullYear()} Solaris Bank. Démo technique.
+          © {new Date().getFullYear()} Solaris Bank. Tous droits réservés.
         </p>
       </div>
 

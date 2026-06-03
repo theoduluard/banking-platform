@@ -430,7 +430,7 @@ export default function TransferPage() {
           <CardContent className="flex items-start gap-2.5 py-3 px-4">
             <Info size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Le virement sera traité via notre infrastructure Kafka. Le solde sera mis à jour sous quelques secondes.
+              Le virement est traité de manière sécurisée. Le solde sera mis à jour en quelques secondes.
             </p>
           </CardContent>
         </Card>
