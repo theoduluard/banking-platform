@@ -9,6 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Logo from '@/components/Logo'
+import AuthBrandPanel from '@/components/AuthBrandPanel'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -51,12 +52,22 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-sm space-y-8">
+    <div className="flex min-h-screen">
 
-        <div className="flex justify-center">
+      {/* ── Brand panel ─────────────────────────────────────────────────────── */}
+      <AuthBrandPanel
+        title="Solaris Bank"
+        subtitle="Votre banque en ligne, simple, moderne et sécurisée."
+      />
+
+      {/* ── Form panel ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">
+        {/* Mobile logo */}
+        <div className="mb-8 lg:hidden">
           <Logo size={36} />
         </div>
+
+      <div className="w-full max-w-sm space-y-8">
 
         {/* ── Success ─────────────────────────────────────────────────────── */}
         {pageState === 'success' && (
@@ -171,6 +182,7 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
+      </div>
       </div>
     </div>
   )

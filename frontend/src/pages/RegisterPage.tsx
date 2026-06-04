@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Logo from '@/components/Logo'
+import AuthBrandPanel from '@/components/AuthBrandPanel'
 import { MailCheck, CheckCircle2 } from 'lucide-react'
 
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
@@ -62,19 +63,10 @@ export default function RegisterPage() {
     <div className="flex min-h-screen">
 
       {/* ── Brand panel ─────────────────────────────────────────────────────── */}
-      <div className="relative hidden w-2/5 flex-col items-center justify-center overflow-hidden bg-primary p-10 lg:flex">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/5" />
-          <div className="absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-white/5" />
-        </div>
-        <div className="relative z-10 text-center">
-          <Logo size={56} variant="icon" className="mx-auto" />
-          <h2 className="mt-6 text-2xl font-semibold text-white">Solaris Bank</h2>
-          <p className="mt-2 text-sm text-white/55">
-            Ouvrez votre compte en moins d'une minute.
-          </p>
-        </div>
-      </div>
+      <AuthBrandPanel
+        title="Solaris Bank"
+        subtitle="Ouvrez votre compte en moins d'une minute."
+      />
 
       {/* ── Form panel ──────────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">

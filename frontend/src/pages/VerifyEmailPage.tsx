@@ -5,6 +5,7 @@ import api from '@/lib/api'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Logo from '@/components/Logo'
+import AuthBrandPanel from '@/components/AuthBrandPanel'
 import { CheckCircle2, XCircle, Loader2, MailX } from 'lucide-react'
 
 type Status = 'loading' | 'success' | 'expired' | 'invalid'
@@ -33,12 +34,22 @@ export default function VerifyEmailPage() {
   }, [])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6">
-      <div className="w-full max-w-sm space-y-8 text-center">
+    <div className="flex min-h-screen">
 
-        <div className="flex justify-center">
+      {/* ── Brand panel ─────────────────────────────────────────────────────── */}
+      <AuthBrandPanel
+        title="Solaris Bank"
+        subtitle="Votre banque en ligne, simple, moderne et sécurisée."
+      />
+
+      {/* ── Content panel ───────────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">
+        {/* Mobile logo */}
+        <div className="mb-8 lg:hidden">
           <Logo size={36} />
         </div>
+
+      <div className="w-full max-w-sm space-y-8 text-center">
 
         {status === 'loading' && (
           <div className="space-y-4">
@@ -112,6 +123,7 @@ export default function VerifyEmailPage() {
           </div>
         )}
 
+      </div>
       </div>
     </div>
   )
