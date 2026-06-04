@@ -3,8 +3,10 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
+import { getUserIdFromToken } from '@/lib/auth'
 import type { Account } from '@/types'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -34,7 +36,8 @@ const accountTypes = [
 ]
 
 export default function NewAccountPage() {
-  const navigate    = useNavigate()
+  const navigate     = useNavigate()
+  const queryClient  = useQueryClient()
   const [submitting, setSubmitting] = useState(false)
 
   const { control, handleSubmit, watch, formState: { errors } } = useForm<TypeForm>({
@@ -47,6 +50,7 @@ export default function NewAccountPage() {
     setSubmitting(true)
     try {
       await api.post<Account>('/api/v1/accounts', { type })
+      await queryClient.invalidateQueries({ queryKey: ['accounts', getUserIdFromToken()] })
       toast.success('Compte ouvert, en attente de validation.')
       navigate('/dashboard')
     } catch (err: unknown) {

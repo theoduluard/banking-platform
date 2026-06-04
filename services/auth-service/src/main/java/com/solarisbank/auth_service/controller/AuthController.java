@@ -1,10 +1,12 @@
 package com.solarisbank.auth_service.controller;
 
+import com.solarisbank.auth_service.dto.ForgotPasswordRequest;
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
 import com.solarisbank.auth_service.dto.RefreshRequest;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.dto.ResendVerificationRequest;
+import com.solarisbank.auth_service.dto.ResetPasswordRequest;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.service.AuthService;
 import jakarta.validation.Valid;
@@ -65,5 +67,28 @@ public class AuthController {
             @Valid @RequestBody ResendVerificationRequest request) {
         authService.resendVerification(request.getEmail());
         return ResponseEntity.ok(Map.of("message", "Verification email sent."));
+    }
+
+    /**
+     * Sends a password-reset link to the given address.
+     * Always returns 200 — never reveals whether the address is registered.
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request.getEmail());
+        return ResponseEntity.ok(Map.of("message",
+                "If this email is registered, a reset link has been sent."));
+    }
+
+    /**
+     * Validates the reset token and updates the password.
+     * 404 for unknown/used tokens, 410 for expired tokens.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getToken(), request.getPassword());
+        return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
     }
 }

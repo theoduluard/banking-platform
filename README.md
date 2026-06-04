@@ -21,6 +21,10 @@ Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et 
 - [Architecture](#architecture)
 - [Flux de virement — Saga Kafka](#flux-de-virement--saga-kafka)
 - [Sécurité](#sécurité)
+  - [Authentification & Autorisation](#authentification--autorisation)
+  - [Sécurité inter-services](#sécurité-inter-services)
+  - [Protection des routes admin](#protection-des-routes-admin-3-couches)
+  - [Idempotence des transactions](#idempotence-des-transactions)
 - [Services](#services)
 - [Lancer le projet](#lancer-le-projet)
 - [API Reference](#api-reference)
@@ -42,24 +46,26 @@ graph TD
     end
 
     subgraph GW["API Gateway — interne"]
-        FILTER["JwtGatewayFilter\nValide JWT\nInjecte X-User-Id · X-User-Role\nBloque /admin si rôle ≠ ADMIN"]
+        FILTER["JwtGatewayFilter\nValide JWT_SECRET\nInjecte X-User-Id · X-User-Role\nBloque /admin si rôle ≠ ADMIN"]
         PROXY["ProxyController\nRouting par préfixe"]
     end
 
     subgraph SVC["Microservices"]
-        AUTH["auth-service :8081\nRegister · Login · BCrypt\nGestion utilisateurs admin\nDataInitializer — seed admin"]
-        ACC["account-service :8082\nComptes CHECKING / SAVINGS\nGénération IBAN · Solde\nGestion comptes admin"]
-        TX["transaction-service :8083\nVirements · Clé idempotence\nSaga Kafka · PENDING→COMPLETED\nHistorique paginé · Vue admin"]
+        AUTH["auth-service :8081\nSigne JWT avec JWT_SECRET\nRegister · Login · BCrypt\nGestion utilisateurs admin"]
+        ACC["account-service :8082\nInternalRequestFilter\nComptes CHECKING / SAVINGS\nGénération IBAN · Solde"]
+        TX["transaction-service :8083\nInternalRequestFilter\nVirements · Clé idempotence\nSaga Kafka"]
+        MSG["messaging-service :8084\nInternalRequestFilter\nMessages · Support tickets\nNotifications Kafka"]
     end
 
-    subgraph MSG["Messaging"]
-        KAFKA[["Apache Kafka\ndebit-requested\ncredit-requested\ndebit-result · credit-result"]]
+    subgraph KAFKA_LAYER["Messaging"]
+        KAFKA[["Apache Kafka\ndebit-requested · credit-requested\ndebit-result · credit-result\naccount.approved · account.rejected"]]
     end
 
     subgraph DB["Bases de données — isolation par service"]
         DB1[("postgres-auth\n:5433")]
         DB2[("postgres-accounts\n:5434")]
         DB3[("postgres-transactions\n:5435")]
+        DB4[("postgres-messaging\n:5436")]
     end
 
     USR -->|HTTPS| NGINX
@@ -70,22 +76,27 @@ graph TD
     PROXY -->|"/api/v1/auth/**\n/api/v1/admin/users/**"| AUTH
     PROXY -->|"/api/v1/accounts/**\n/api/v1/admin/accounts/**"| ACC
     PROXY -->|"/api/v1/transactions/**\n/api/v1/admin/transactions/**"| TX
+    PROXY -->|"/api/v1/messages/**\n/api/v1/support/**"| MSG
+
+    TX -->|"X-Internal-Secret\nPOST /credit (compensation saga)"| ACC
 
     TX -->|DebitRequestedEvent| KAFKA
     KAFKA -->|DebitResultEvent| TX
     KAFKA -->|CreditRequestedEvent| ACC
     ACC -->|CreditResultEvent| KAFKA
+    KAFKA -->|"account.approved\naccount.rejected"| MSG
 
     AUTH --- DB1
     ACC --- DB2
     TX --- DB3
+    MSG --- DB4
 ```
 
 ### Principes d'architecture
 
 - **Un service = une responsabilité** — chaque service gère son propre domaine métier
 - **Une base de données par service** — pas de base partagée, pas de jointures cross-service
-- **Sécurité centralisée + défense en profondeur** — le gateway valide le JWT et injecte les headers ; chaque service les re-valide indépendamment
+- **Sécurité centralisée + défense en profondeur** — le gateway valide le JWT et injecte les headers ; chaque service les re-valide indépendamment via `InternalRequestFilter` (exige `X-User-Id` ou `X-Internal-Secret`)
 - **Stateless** — aucune session serveur, authentification uniquement par JWT
 - **Async par défaut** — les virements passent par Kafka (Saga pattern) pour la fiabilité et la résilience
 
@@ -121,18 +132,21 @@ sequenceDiagram
     ACC->>ACC: Débite le compte source
     ACC->>K: DebitResultEvent(SUCCESS)
 
-    K->>TX: DebitResultEvent
+    K->>TX: DebitResultEvent(SUCCESS)
+    TX->>TX: UPDATE transaction → DEBIT_CONFIRMED
     TX->>K: CreditRequestedEvent
 
     K->>ACC: CreditRequestedEvent
     ACC->>ACC: Crédite le compte destinataire
     ACC->>K: CreditResultEvent(SUCCESS)
 
-    K->>TX: CreditResultEvent
+    K->>TX: CreditResultEvent(SUCCESS)
     TX->>TX: UPDATE transaction → COMPLETED
 ```
 
 > **Idempotence** : chaque soumission de formulaire génère un UUID unique (`Idempotency-Key`). Si la requête est rejouée (double-clic, timeout réseau), le serveur retourne la transaction existante sans en créer une seconde. La contrainte `UNIQUE` en base garantit ce comportement même sous charge concurrente.
+
+> **État intermédiaire `DEBIT_CONFIRMED`** : avant de publier `CreditRequestedEvent`, la transaction passe en `DEBIT_CONFIRMED`. Si Kafka est indisponible à cet instant, `@Transactional` annule la mise à jour — la transaction reste `PENDING` et le message Kafka est relivré. Ce verrou d'état empêche également un `DebitResult` redélivré de déclencher un second crédit.
 
 ---
 
@@ -167,6 +181,29 @@ Requête → [1] AdminRoute (React)  →  [2] JwtGatewayFilter  →  [3] AdminCo
 - Les comptes `ADMIN` ne peuvent pas accéder au portail client (`ProtectedRoute` les renvoie vers `/admin`)
 - L'inscription publique crée toujours un compte `CLIENT` — il est impossible de s'auto-promouvoir
 - Le compte admin initial est créé par `DataInitializer` au démarrage, via les variables d'environnement `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+
+### Sécurité inter-services
+
+Deux secrets distincts protègent les deux types de communication :
+
+| Secret | Utilisé par | Rôle |
+|---|---|---|
+| `JWT_SECRET` | `auth-service` (signe) · `api-gateway` (vérifie) | Authentifie les **utilisateurs** |
+| `INTERNAL_SECRET` | Tous les services backend | Authentifie les **appels inter-services** |
+
+**`JWT_SECRET`** intervient à deux moments : `auth-service` l'utilise pour signer le token à la connexion, `api-gateway` l'utilise pour vérifier la signature à chaque requête entrante. Les deux services doivent partager la même valeur (HMAC-SHA256).
+
+**`INTERNAL_SECRET`** protège les endpoints HTTP des services backend. Chaque service expose un `InternalRequestFilter` qui exige sur toutes les requêtes soit un `X-User-Id` valide (injecté par l'API Gateway après vérification JWT), soit le header `X-Internal-Secret` (pour les appels de service à service). Exemple concret : lors d'une compensation de saga, `transaction-service` appelle directement `POST /api/v1/accounts/{id}/credit` avec ce header — sans passer par l'API Gateway, donc sans JWT utilisateur.
+
+```
+Utilisateur                   transaction-service
+    │  JWT                            │
+    ▼                                 │  X-Internal-Secret
+API Gateway ──── X-User-Id ──▶ account-service
+                                      ▲
+                              InternalRequestFilter
+                         (accepte X-User-Id OU X-Internal-Secret)
+```
 
 ### Idempotence des transactions
 
@@ -244,32 +281,30 @@ Colle l'URL dans ton navigateur pour vérifier le compte sans SMTP.
 
 ### Production (Docker Compose)
 
-Les images sont construites et poussées vers GHCR par GitHub Actions à chaque push sur `main`.
+Les images sont construites et poussées vers GHCR par GitHub Actions à chaque push sur `main`. Le déploiement sur le NAS est **entièrement automatisé** — les secrets sont transmis depuis GitHub Secrets directement à `docker compose`, aucun fichier `.env` n'est nécessaire sur le serveur.
 
-```bash
-# Sur le serveur — créer le fichier .env
-cat > .env <<EOF
-DB_PASSWORD=<mot_de_passe_fort>
-JWT_SECRET=<clé_base64_256_bits>
-JWT_EXPIRATION=86400000
-JWT_REFRESH_EXPIRATION=604800000
-ADMIN_EMAIL=admin@solaris.bank
-ADMIN_PASSWORD=<mot_de_passe_fort>
+**Secrets à configurer dans GitHub** *(Settings → Secrets and variables → Actions)* :
 
-# SMTP (Brevo recommandé)
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USERNAME=<ton_email_brevo>
-SMTP_PASSWORD=<clé_smtp_brevo>
-SMTP_FROM=noreply@solaris-bank.fr
+| Secret | Description | Génération |
+|---|---|---|
+| `JWT_SECRET` | Clé de signature JWT (HMAC-SHA256) | `openssl rand -base64 32` |
+| `INTERNAL_SECRET` | Secret inter-services | `openssl rand -hex 32` |
+| `NAS_HOST` | IP ou hostname du NAS | — |
+| `NAS_USER` | Utilisateur SSH | — |
+| `NAS_SSH_KEY` | Clé privée SSH (PEM) | — |
+| `NAS_PORT` | Port SSH (défaut 22) | — |
+| `NAS_DEPLOY_PATH` | Chemin absolu sur le NAS | — |
+| `GHCR_TOKEN` | GitHub PAT `read:packages` | — |
+| `ADMIN_EMAIL` | Email du compte admin initial | — |
+| `ADMIN_PASSWORD` | Mot de passe admin (fort) | — |
+| `SMTP_USERNAME` | Login SMTP (Brevo) | — |
+| `SMTP_PASSWORD` | Clé SMTP Brevo | — |
+| `SMTP_FROM` | Adresse expéditeur | — |
+| `FRONTEND_URL` | URL publique du frontend | — |
 
-# URL publique du frontend (utilisée dans les liens des emails)
-FRONTEND_URL=https://ton-domaine.fr
-EOF
+Une fois ces secrets configurés, chaque push sur `main` déclenche automatiquement build → push GHCR → déploiement SSH sur le NAS.
 
-# Démarrer la stack
-docker compose -f docker-compose.prod.yml up -d
-```
+> **Déploiement manuel** (sans GitHub Actions) : les mêmes variables peuvent être définies dans un fichier `.env` aux côtés de `docker-compose.prod.yml`, puis lancer `docker compose -f docker-compose.prod.yml up -d`.
 
 Seul le port **8080** est exposé (nginx frontend). L'api-gateway et les microservices sont internes au réseau Docker.
 

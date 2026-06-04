@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Logo from '@/components/Logo'
 import type { AuthResponse } from '@/types'
+import { cn } from '@/lib/utils'
 
 const schema = z.object({
   email:    z.string().email('Email invalide'),
@@ -28,13 +29,16 @@ const features = [
 
 export default function LoginPage() {
   const navigate  = useNavigate()
-  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
-  const [loginError,      setLoginError]      = useState<string | null>(null)
-  const [resending, setResending]             = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail]   = useState<string | null>(null)
+  const [loginError,      setLoginError]        = useState<string | null>(null)
+  const [resending,       setResending]         = useState(false)
+  const [forgotHint,      setForgotHint]        = useState(false)
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
+
+  const emailValue = watch('email', '')
 
   async function onSubmit(data: FormData) {
     setUnverifiedEmail(null)
@@ -196,6 +200,20 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-sm font-medium">Mot de passe</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!emailValue?.trim()) {
+                      setForgotHint(true)
+                      return
+                    }
+                    setForgotHint(false)
+                    navigate(`/forgot-password?email=${encodeURIComponent(emailValue.trim())}`)
+                  }}
+                  className="text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
+                >
+                  Mot de passe oublié ?
+                </button>
               </div>
               <Input
                 id="password"
@@ -204,6 +222,11 @@ export default function LoginPage() {
                 {...register('password', { onChange: () => setLoginError(null) })}
               />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+              {forgotHint && !emailValue?.trim() && (
+                <p className={cn('text-xs text-amber-600')}>
+                  Saisissez votre adresse email ci-dessus pour réinitialiser votre mot de passe.
+                </p>
+              )}
             </div>
 
             <Button

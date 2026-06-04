@@ -59,6 +59,13 @@ public class User {
     /** Token expires 24 h after issuance. */
     private LocalDateTime emailVerificationTokenExpiry;
 
+    /** UUID token sent for password reset — null once used or not yet set. */
+    @Column(unique = true)
+    private String passwordResetToken;
+
+    /** Password reset token expires 1 h after issuance. */
+    private LocalDateTime passwordResetTokenExpiry;
+
     @PrePersist
     public void prePersist(){
         this.createdAt = LocalDate.now();

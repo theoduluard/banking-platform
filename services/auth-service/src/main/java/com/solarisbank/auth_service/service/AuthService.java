@@ -106,6 +106,46 @@ public class AuthService {
         log.info("[Verify] Resent verification email to {}", email);
     }
 
+    // ── Password reset ────────────────────────────────────────────────────────
+
+    /**
+     * Generates a password-reset token and sends it by email.
+     * Never reveals whether the address is registered (security).
+     */
+    public void requestPasswordReset(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            String token = UUID.randomUUID().toString();
+            user.setPasswordResetToken(token);
+            user.setPasswordResetTokenExpiry(LocalDateTime.now().plusHours(1));
+            userRepository.save(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstname(), token);
+            log.info("[Reset] Password reset email sent to {}", email);
+        });
+        // Log at info level even when user doesn't exist — do not distinguish in response
+        log.info("[Reset] Password reset requested for {}", email);
+    }
+
+    /**
+     * Validates the reset token, then updates the user's password.
+     * 404 for unknown/used tokens, 410 for expired tokens.
+     */
+    public void resetPassword(String token, String newPassword) {
+        User user = userRepository.findByPasswordResetToken(token)
+                .orElseThrow(() -> new BusinessException(
+                        "Invalid or already used reset token.", HttpStatus.NOT_FOUND));
+
+        if (user.getPasswordResetTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(
+                    "Reset token has expired. Please request a new one.", HttpStatus.GONE);
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetTokenExpiry(null);
+        userRepository.save(user);
+        log.info("[Reset] Password successfully reset for user {}", user.getEmail());
+    }
+
     /**
      * Rotating refresh token — validates the incoming refresh token, then issues
      * a brand-new access + refresh pair.  The old refresh token is implicitly
