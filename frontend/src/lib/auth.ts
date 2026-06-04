@@ -1,4 +1,4 @@
-// ── Access token (Fix 15) ─────────────────────────────────────────────────────
+// ── Access token ──────────────────────────────────────────────────────────────
 //
 // Moved from localStorage → sessionStorage.
 // sessionStorage is:
@@ -23,7 +23,7 @@ export function setToken(token: string): void {
   sessionStorage.setItem('token', token)
 }
 
-// ── User role (Fix 16) ────────────────────────────────────────────────────────
+// ── User role ─────────────────────────────────────────────────────────────────
 //
 // The role is stored from the login RESPONSE BODY (server-issued, HTTPS-delivered)
 // instead of being decoded from the JWT payload on the client.
@@ -54,7 +54,7 @@ export function removeToken(): void {
   localStorage.removeItem('refreshToken')
 }
 
-// ── Refresh token: HttpOnly cookie (Fix 15) ───────────────────────────────────
+// ── Refresh token: HttpOnly cookie ────────────────────────────────────────────
 //
 // The refresh token is no longer accessible to JavaScript at all — it lives in
 // an HttpOnly cookie set by the server on login/refresh.  The browser sends it
@@ -112,8 +112,8 @@ export function getUserIdFromToken(): string | null {
 }
 
 /**
- * Fix 16: returns the role stored in sessionStorage at login time (from the
- * server response body), NOT decoded from the unsigned JWT payload.
+ * Returns the role stored in sessionStorage at login time (from the server
+ * response body), NOT decoded from the unsigned JWT payload.
  * Falls back to the JWT claim only if the sessionStorage value is missing
  * (e.g. after a hard page reload that cleared sessionStorage).
  */

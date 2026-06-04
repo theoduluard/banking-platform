@@ -6,7 +6,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Fix 15: CORS configuration with credentials support.
+ * CORS configuration with credentials support.
  * Browsers enforce the "credentials" flag: when a request carries cookies
  * (withCredentials: true in Axios), the server MUST respond with
  * Access-Control-Allow-Origin set to the exact requesting origin (not '*')

@@ -122,7 +122,7 @@ public class AccountService {
         account.setStatus(Account.Status.ACTIVE);
         AccountResponse response = toResponse(accountRepository.save(account));
 
-        // Fix 17: publish Kafka event only after the DB transaction is committed.
+        // Publish Kafka event only after the DB transaction is committed.
         // Registering a synchronization here guarantees afterCommit() is called once
         // the surrounding @Transactional has successfully flushed to the database.
         // If the transaction rolls back the event is never published.
@@ -154,7 +154,7 @@ public class AccountService {
         account.setStatus(Account.Status.REJECTED);
         AccountResponse response = toResponse(accountRepository.save(account));
 
-        // Fix 17: same pattern as approveAccount — publish after commit.
+        // Same pattern as approveAccount — publish after commit.
         AccountRejectedEvent rejectedEvent = new AccountRejectedEvent(
                 account.getAccountId(),
                 account.getUserId(),
@@ -223,9 +223,9 @@ public class AccountService {
      * Saves a ProcessedSagaEvent atomically with the balance update so that a
      * redelivered DebitRequested message is detected and skipped without touching
      * the balance a second time.
-     * Fix 13: delegates to debit() instead of duplicating its logic. Both methods
-     * share the same @Transactional context (PROPAGATION.REQUIRED), so the
-     * pessimistic lock acquired inside debit() is part of this transaction.
+     * Delegates to debit() instead of duplicating its logic. Both methods share the
+     * same @Transactional context (PROPAGATION.REQUIRED), so the pessimistic lock
+     * acquired inside debit() is part of this transaction.
      * Any future changes to debit() (new business rules, fraud checks, etc.)
      * are automatically applied to the saga path too.
      */
@@ -265,7 +265,7 @@ public class AccountService {
     /**
      * Saga-aware credit: idempotent version called from the Kafka consumer.
      * Saves a ProcessedSagaEvent atomically with the balance update.
-     * Fix 13: delegates to credit() for the same reason as debitFromSaga().
+     * Delegates to credit() for the same reason as debitFromSaga().
      */
     @Transactional
     public void creditFromSaga(UUID transactionId, UUID accountId, BigDecimal amount) {
@@ -291,12 +291,12 @@ public class AccountService {
 
     @Transactional
     public AccountResponse adminDeposit(UUID accountId, BigDecimal amount) {
-        // Fix 10: use pessimistic write lock — concurrent admin deposits on the same
-        // account could otherwise both read the same balance and produce a lost update.
+        // Use pessimistic write lock — concurrent admin deposits on the same account
+        // could otherwise both read the same balance and produce a lost update.
         Account account = accountRepository.findWithLockById(accountId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
-        // Fix 12: require ACTIVE (not just !CLOSED) — prevents depositing into
+        // Require ACTIVE (not just !CLOSED) — prevents depositing into
         // PENDING_APPROVAL or REJECTED accounts, which should not hold real balances.
         if (account.getStatus() != Account.Status.ACTIVE) {
             throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
@@ -308,11 +308,11 @@ public class AccountService {
 
     @Transactional
     public AccountResponse adminWithdrawal(UUID accountId, BigDecimal amount) {
-        // Fix 10: pessimistic write lock — same rationale as adminDeposit.
+        // Pessimistic write lock — same rationale as adminDeposit.
         Account account = accountRepository.findWithLockById(accountId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
-        // Fix 12: require ACTIVE.
+        // Require ACTIVE.
         if (account.getStatus() != Account.Status.ACTIVE) {
             throw new BusinessException("Account is not active", HttpStatus.METHOD_NOT_ALLOWED);
         }

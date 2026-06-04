@@ -30,7 +30,7 @@ export default function Navbar() {
   })
 
   async function handleLogout() {
-    // Fix 14: revoke the refresh token on the server before clearing local state.
+    // Revoke the refresh token on the server before clearing local state.
     // The HttpOnly cookie is sent automatically (withCredentials) so no token
     // needs to be passed in the body.  Errors are silently ignored so a network
     // blip never leaves the user stuck on the current page.

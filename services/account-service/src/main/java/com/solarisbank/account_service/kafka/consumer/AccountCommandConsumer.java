@@ -39,7 +39,7 @@ public class AccountCommandConsumer {
                         .success(true)
                         .build();
             } catch (DataIntegrityViolationException e) {
-                // Fix 9: The unique constraint on ProcessedSagaEvent fired, meaning a concurrent
+                // The unique constraint on ProcessedSagaEvent fired, meaning a concurrent
                 // consumer instance processed this exact event simultaneously. The @Transactional
                 // in debitFromSaga() rolled back the balance change. We re-check: if the marker
                 // now exists, another instance succeeded → report success so the saga continues.
@@ -89,7 +89,7 @@ public class AccountCommandConsumer {
                         .success(true)
                         .build();
             } catch (DataIntegrityViolationException e) {
-                // Fix 9: same rationale as the DEBIT path above.
+                // Same rationale as the DEBIT path above.
                 boolean alreadyProcessed = processedEventRepository
                         .existsByTransactionIdAndEventType(event.getTransactionId(), "CREDIT");
                 if (alreadyProcessed) {

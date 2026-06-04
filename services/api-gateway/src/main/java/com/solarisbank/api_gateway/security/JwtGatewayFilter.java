@@ -28,8 +28,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/refresh",
-            // Fix 14: logout is public so the refresh token cookie can be revoked even
-            // when the access token has already expired.  No JWT auth is needed — the
+            // Logout is public so the refresh token cookie can be revoked even when
+            // the access token has already expired.  No JWT auth is needed — the
             // refresh token cookie is the credential being invalidated.
             "/api/v1/auth/logout",
             "/api/v1/auth/verify-email",

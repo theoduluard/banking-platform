@@ -68,7 +68,7 @@ class AccountResultConsumerTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        // Same data but already past the DEBIT_CONFIRMED transition (Fix 5)
+        // Same data but already past the DEBIT_CONFIRMED transition
         debitConfirmedTransaction = Transaction.builder()
                 .id(transactionId)
                 .fromAccountId(pendingTransaction.getFromAccountId())
@@ -95,7 +95,6 @@ class AccountResultConsumerTest {
         consumer.onDebitResult(payload);
 
         verify(sagaEventProducer).publishCreditRequest(any(CreditRequestedEvent.class));
-        // Fix 5: consumer saves DEBIT_CONFIRMED before publishing CreditRequested
         verify(transactionRepository).save(argThat(t ->
                 t.getStatus() == Transaction.Status.DEBIT_CONFIRMED));
     }
@@ -152,7 +151,6 @@ class AccountResultConsumerTest {
         String payload = objectMapper.writeValueAsString(
                 new CreditResultEvent(transactionId, true, null));
 
-        // Fix 5: onCreditResult guard requires status == DEBIT_CONFIRMED
         when(transactionRepository.findById(transactionId))
                 .thenReturn(Optional.of(debitConfirmedTransaction));
 
@@ -168,7 +166,6 @@ class AccountResultConsumerTest {
         String payload = objectMapper.writeValueAsString(
                 new CreditResultEvent(transactionId, false, "Account blocked"));
 
-        // Fix 5: onCreditResult guard requires status == DEBIT_CONFIRMED
         when(transactionRepository.findById(transactionId))
                 .thenReturn(Optional.of(debitConfirmedTransaction));
 

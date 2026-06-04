@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Fix 14: server-side refresh token store.
+ * Server-side refresh token store.
  * Only the SHA-256 hash of the raw token is persisted — never the plaintext.
  * This means a DB breach alone is not sufficient to impersonate a user.
  * Tokens are deleted on logout (explicit revocation) and rotated on every

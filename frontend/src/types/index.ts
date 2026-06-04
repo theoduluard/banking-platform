@@ -14,7 +14,7 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   accessToken: string
-  /** Fix 15: refresh token is now set as an HttpOnly cookie — absent from the JSON body. */
+  /** Refresh token is set as an HttpOnly cookie — absent from the JSON body. */
   refreshToken?: string
   email: string
   firstname: string

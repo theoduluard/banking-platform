@@ -6,8 +6,8 @@ import lombok.Data;
 
 /**
  * Login / refresh response sent to the client.
- * Fix 14+15: {@code refreshToken} is populated internally (so the controller can
- * set it as an HttpOnly cookie) but is then nulled out before serialization.
+ * {@code refreshToken} is populated internally (so the controller can set it as
+ * an HttpOnly cookie) but is then nulled out before serialization.
  * {@code @JsonInclude(NON_NULL)} ensures the field is absent from the JSON body
  * rather than appearing as {@code "refreshToken": null}.
  */

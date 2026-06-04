@@ -4,7 +4,7 @@ import { getToken, setToken, removeToken } from '@/lib/auth'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: { 'Content-Type': 'application/json' },
-  // Fix 15: withCredentials allows the browser to send and receive HttpOnly cookies
+  // withCredentials allows the browser to send and receive HttpOnly cookies
   // (the refresh token cookie) on cross-origin requests to the api-gateway.
   withCredentials: true,
 })
@@ -95,7 +95,7 @@ api.interceptors.response.use(
     originalRequest._retry = true
 
     try {
-      // Fix 15: no body needed — the HttpOnly refresh token cookie is sent
+      // No body needed — the HttpOnly refresh token cookie is sent
       // automatically by the browser because withCredentials is true.
       const { data } = await axios.post<{ accessToken: string }>(
         `${import.meta.env.VITE_API_URL}/api/v1/auth/refresh`,

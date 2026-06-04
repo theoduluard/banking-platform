@@ -159,8 +159,8 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class))).thenReturn(loginResponse);
 
         // Act & Assert
-        // Fix 14+15: the refresh token is now set as an HttpOnly cookie and stripped
-        // from the JSON body.  The response must NOT include $.refreshToken.
+        // The refresh token is set as an HttpOnly cookie and stripped from the JSON body.
+        // The response must NOT include $.refreshToken.
         // We use header() matchers for Set-Cookie because MockMvc's cookie() matcher
         // only reads cookies set via HttpServletResponse.addCookie(), not raw Set-Cookie headers.
         mockMvc.perform(post("/api/v1/auth/login")

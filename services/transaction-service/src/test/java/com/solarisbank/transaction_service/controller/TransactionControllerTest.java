@@ -109,7 +109,6 @@ class TransactionControllerTest {
     @Test
     void getHistory_shouldReturn200_withPageOfTransactions() throws Exception {
         Page<TransactionResponse> page = new PageImpl<>(List.of(pendingResponse));
-        // Fix 19: getHistory now takes userId for ownership validation
         when(transactionService.getHistory(fromAccountId, userId, 0, 20)).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/transactions")
@@ -155,7 +154,6 @@ class TransactionControllerTest {
 
     @Test
     void getHistory_shouldReturn500_whenUnexpectedErrorOccurs() throws Exception {
-        // Fix 19: getHistory signature now includes userId
         when(transactionService.getHistory(any(), any(), eq(0), eq(20)))
                 .thenThrow(new RuntimeException("Unexpected error"));
 

@@ -38,7 +38,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
 
     /**
-     * Fix 14: refresh-expiration from application.properties (milliseconds).
+     * Refresh-expiration from application.properties (milliseconds).
      * Injected as a field (non-final) to stay outside the Lombok @RequiredArgsConstructor.
      */
     @Value("${jwt.refresh-expiration:604800000}")
@@ -161,12 +161,12 @@ public class AuthService {
         log.info("[Reset] Password successfully reset for user {}", user.getEmail());
     }
 
-    // ── Refresh token (Fix 14) ────────────────────────────────────────────────
+    // ── Refresh token ────────────────────────────────────────────────────────
 
     /**
      * Validates a raw opaque refresh token against the DB hash store, rotates it
      * (deletes old entry, issues new one), and returns a fresh token pair.
-     * Fix 14+15: the token is an opaque UUID string stored as a SHA-256 hash in DB.
+     * The token is an opaque UUID string stored as a SHA-256 hash in DB.
      * The caller (AuthController) receives the raw token from the HttpOnly cookie,
      * passes it here, and puts the new cookie in the response.
      */
@@ -200,7 +200,7 @@ public class AuthService {
     /**
      * Revokes the refresh token identified by the raw cookie value.
      * Idempotent: does nothing if the token is unknown or already revoked.
-     * Fix 14: explicit logout now truly invalidates the session,
+     * Explicit logout truly invalidates the session,
      * eliminating the 7-day residual validity window.
      */
     public void logout(String rawRefreshToken) {
@@ -225,7 +225,7 @@ public class AuthService {
                         user.getRole().name(),
                         user.getUserId()
                 ))
-                // Fix 14+15: opaque token persisted as SHA-256 hash;
+                // Opaque token persisted as SHA-256 hash;
                 // the controller sets it as an HttpOnly cookie and strips it from the body.
                 .refreshToken(issueRefreshToken(user))
                 .email(user.getEmail())

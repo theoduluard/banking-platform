@@ -27,7 +27,7 @@ public class AccountController {
 
     private final AccountService accountService;
 
-    // Fix 11: used to restrict the /credit endpoint to internal service-to-service calls only.
+    // Used to restrict the /credit endpoint to internal service-to-service calls only.
     @Value("${internal.secret}")
     private String internalSecret;
 
@@ -69,7 +69,7 @@ public class AccountController {
      * Resolves an IBAN to an account ID.
      * Used by the frontend to look up the destination account before a transfer.
      * Only returns the account ID — no balance, no status (privacy).
-     * Fix 18: require X-User-Id so only authenticated users can call this endpoint.
+     * Requires X-User-Id so only authenticated users can call this endpoint.
      * Without it, any unauthenticated caller could enumerate accounts by probing
      * predictable IBANs. The header is already injected by the api-gateway JWT filter.
      */
@@ -118,7 +118,7 @@ public class AccountController {
     }
 
     /**
-     * Fix 11: /credit is an internal endpoint called only by transaction-service.
+     * /credit is an internal endpoint called only by transaction-service.
      * Unlike /debit (which is ownership-checked via X-User-Id + findByAccountIdAndUserId),
      * /credit performs no ownership validation — any authenticated user reaching it could
      * credit any account arbitrarily.

@@ -47,7 +47,6 @@ class AuthServiceTest {
     @Mock
     private EmailService emailService;
 
-    // Fix 14: AuthService now stores refresh token hashes in DB
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
@@ -142,7 +141,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(savedUser));
         when(jwtService.generateAccessToken(anyString(), anyString(), any(UUID.class)))
                 .thenReturn("access_token");
-        // Fix 14: refresh token is now a DB-backed opaque token; save() is mocked implicitly
+        // Refresh token is a DB-backed opaque token; save() is mocked implicitly
         when(refreshTokenRepository.save(any(RefreshToken.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
@@ -204,7 +203,7 @@ class AuthServiceTest {
         // Act
         authService.login(loginRequest);
 
-        // Assert — Fix 14: refresh token is now opaque (no generateRefreshToken call)
+        // Assert — refresh token is opaque (no generateRefreshToken call)
         verify(jwtService).generateAccessToken("john.doe@example.com", "CLIENT", userId);
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }

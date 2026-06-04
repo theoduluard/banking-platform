@@ -87,12 +87,10 @@ public class TransactionService {
     }
 
     /**
-     * Fix 19: ownership check before returning history.
+     * Ownership check before returning history.
      * Calling accountClient.getAccount(accountId, userId) performs a
      * findByAccountIdAndUserId in account-service — if the account doesn't
      * belong to this user it throws a 404 which propagates as a BusinessException.
-     * This closes the IDOR that allowed any authenticated user to read any
-     * account's transaction history by guessing a UUID.
      */
     @Transactional(readOnly = true)
     public Page<TransactionResponse> getHistory(UUID accountId, UUID userId, int page, int size) {

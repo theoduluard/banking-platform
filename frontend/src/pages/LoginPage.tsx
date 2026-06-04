@@ -45,7 +45,7 @@ export default function LoginPage() {
     try {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
-      // Fix 16: store the role from the response body (server-issued), not from
+      // Store the role from the response body (server-issued), not from
       // the unsigned JWT payload — prevents client-side privilege escalation.
       setRole(res.data.role)
 

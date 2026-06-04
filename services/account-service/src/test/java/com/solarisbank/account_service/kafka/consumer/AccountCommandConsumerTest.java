@@ -76,7 +76,6 @@ class AccountCommandConsumerTest {
         DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
-        // Consumer calls debitFromSaga, not debit directly (Fix 13)
         doThrow(new RuntimeException("Insufficient funds"))
                 .when(accountService).debitFromSaga(eq(transactionId), eq(accountId), eq(userId), eq(amount));
 
@@ -119,7 +118,6 @@ class AccountCommandConsumerTest {
         CreditRequestedEvent event = new CreditRequestedEvent(transactionId, toAccountId, fromAccountId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
-        // Consumer calls creditFromSaga, not credit directly (Fix 13)
         doThrow(new RuntimeException("Account blocked"))
                 .when(accountService).creditFromSaga(eq(transactionId), eq(toAccountId), eq(amount));
 

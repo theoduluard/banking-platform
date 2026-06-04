@@ -29,11 +29,10 @@ public class AccountResultConsumer {
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_DEBIT_RESULT, groupId = "transaction-service")
     @Transactional
-    // Fix 8: @Transactional ensures that if publishCreditRequest() throws (Kafka broker down),
+    // @Transactional ensures that if publishCreditRequest() throws (Kafka broker down),
     // the DEBIT_CONFIRMED save is rolled back atomically. The exception propagates out of the
     // method, Kafka does not commit the offset, and the message is redelivered. On retry,
     // status is still PENDING so the guard passes and the whole step is retried correctly.
-    // Previously, the outer catch swallowed ALL exceptions → offset committed → saga stuck forever.
     public void onDebitResult(String payload) {
         DebitResultEvent event;
         try {
@@ -83,7 +82,7 @@ public class AccountResultConsumer {
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_CREDIT_RESULT, groupId = "transaction-service")
     @Transactional
-    // Fix 8: same @Transactional rationale as onDebitResult.
+    // Same @Transactional rationale as onDebitResult.
     public void onCreditResult(String payload) {
         CreditResultEvent event;
         try {
@@ -115,7 +114,7 @@ public class AccountResultConsumer {
             transactionRepository.save(tx);
             log.info("Transaction {} COMPLETED", tx.getId());
         } else {
-            // Fix 7: set status to FAILED and persist BEFORE calling the compensation REST endpoint.
+            // Set status to FAILED and persist BEFORE calling the compensation REST endpoint.
             // If we crash between the credit() call and the save(FAILED), a redelivered CreditResult
             // would find status=DEBIT_CONFIRMED, re-enter this branch and call credit() again —
             // double-crediting the source account. By saving FAILED first, any redelivery hits the

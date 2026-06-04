@@ -28,7 +28,7 @@ public class AuthController {
     private final AuthService authService;
 
     /**
-     * Fix 14+15: refresh token cookie lifetime matches JWT refresh-expiration setting.
+     * Refresh token cookie lifetime matches JWT refresh-expiration setting.
      * Injected as a field so it stays outside @RequiredArgsConstructor.
      */
     @Value("${jwt.refresh-expiration:604800000}")
@@ -45,11 +45,11 @@ public class AuthController {
     }
 
     /**
-     * Fix 14+15: refresh token is now returned as an HttpOnly, SameSite=Lax cookie
-     * instead of a JSON body field.  This prevents JavaScript (XSS) from accessing
-     * or exfiltrating the refresh token.
-     * Fix 16: the role value is included in the response body so the frontend can
-     * store it in sessionStorage and avoid unsafe client-side JWT decoding.
+     * The refresh token is returned as an HttpOnly, SameSite=Lax cookie instead of
+     * a JSON body field.  This prevents JavaScript (XSS) from accessing or
+     * exfiltrating the refresh token.
+     * The role value is included in the response body so the frontend can store it
+     * in sessionStorage and avoid unsafe client-side JWT decoding.
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -66,8 +66,8 @@ public class AuthController {
     }
 
     /**
-     * Fix 14+15: reads the refresh token from the HttpOnly cookie rather than
-     * from the request body.  Issues a fresh token pair and rotates the cookie.
+     * Reads the refresh token from the HttpOnly cookie rather than from the request
+     * body.  Issues a fresh token pair and rotates the cookie.
      */
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(
@@ -90,7 +90,7 @@ public class AuthController {
     }
 
     /**
-     * Fix 14: explicit logout revokes the refresh token in the DB and clears the cookie,
+     * Explicit logout revokes the refresh token in the DB and clears the cookie,
      * eliminating the previous 7-day residual validity window after logout.
      */
     @PostMapping("/logout")
