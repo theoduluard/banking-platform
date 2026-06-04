@@ -171,13 +171,15 @@ class TransactionServiceTest {
     @Test
     void getHistory_shouldReturnPageOfTransactions() {
         Page<Transaction> page = new PageImpl<>(List.of(pendingTransaction), PageRequest.of(0, 20), 1);
+        // Fix 19: getHistory now validates account ownership via accountClient.getAccount()
+        when(accountClient.getAccount(fromAccountId, userId)).thenReturn(activeSourceAccount);
         when(transactionRepository.findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(
                 fromAccountId, fromAccountId, PageRequest.of(0, 20))).thenReturn(page);
 
-        Page<TransactionResponse> result = transactionService.getHistory(fromAccountId, 0, 20);
+        Page<TransactionResponse> result = transactionService.getHistory(fromAccountId, userId, 0, 20);
 
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getId()).isEqualTo(transactionId);
+        assertThat(result.getContent().getFirst().getId()).isEqualTo(transactionId);
     }
 
     // ── getTransaction ─────────────────────────────────────────────────────────

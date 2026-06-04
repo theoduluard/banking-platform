@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { ShieldCheck, TrendingUp, Zap, MailWarning, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import api from '@/lib/api'
-import { setToken, setRefreshToken, getUserRoleFromToken } from '@/lib/auth'
+import { setToken, setRole, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,7 +45,9 @@ export default function LoginPage() {
     try {
       const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
       setToken(res.data.accessToken)
-      setRefreshToken(res.data.refreshToken)
+      // Fix 16: store the role from the response body (server-issued), not from
+      // the unsigned JWT payload — prevents client-side privilege escalation.
+      setRole(res.data.role)
 
       if (getUserRoleFromToken() === 'ADMIN') {
         navigate('/admin')

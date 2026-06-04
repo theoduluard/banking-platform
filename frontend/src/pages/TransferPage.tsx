@@ -119,7 +119,7 @@ export default function TransferPage() {
   }, [])
 
   // ── Form ──────────────────────────────────────────────────────────────────
-  const { control, register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
+  const { control, register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
 
@@ -391,7 +391,46 @@ export default function TransferPage() {
 
         {/* ── Amount ──────────────────────────────────────────────────────── */}
         <div className="space-y-2">
-          <Label htmlFor="amount" className="text-sm font-medium">Montant</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="amount" className="text-sm font-medium">Montant</Label>
+            {fromAccount && (
+              <span className="text-xs text-muted-foreground">
+                Disponible : <strong className="text-foreground">{formatAmount(fromAccount.balance, fromAccount.currency)}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Quick-amount shortcuts */}
+          {fromAccount && (
+            <div className="flex gap-1.5 flex-wrap">
+              {[10, 50, 100, 500].map(amt => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setValue('amount', amt, { shouldValidate: true })}
+                  disabled={fromAccount.balance < amt}
+                  className={cn(
+                    'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+                    fromAccount.balance >= amt
+                      ? 'hover:bg-muted/60 text-muted-foreground border-border'
+                      : 'opacity-40 cursor-not-allowed text-muted-foreground border-border',
+                  )}
+                >
+                  {amt} €
+                </button>
+              ))}
+              {fromAccount.balance > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setValue('amount', Number(fromAccount.balance.toFixed(2)), { shouldValidate: true })}
+                  className="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/60 text-muted-foreground border-border"
+                >
+                  Tout
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="relative">
             <Input
               id="amount"
@@ -406,6 +445,15 @@ export default function TransferPage() {
               EUR
             </span>
           </div>
+
+          {/* Inline insufficient funds warning */}
+          {fromAccount && watch('amount') > fromAccount.balance && !errors.amount && (
+            <p className="flex items-center gap-1.5 text-xs text-amber-600">
+              <AlertTriangle size={12} />
+              Solde insuffisant — disponible : {formatAmount(fromAccount.balance, fromAccount.currency)}
+            </p>
+          )}
+
           {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
         </div>
 

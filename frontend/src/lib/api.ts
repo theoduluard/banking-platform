@@ -1,21 +1,18 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
-import {
-  getRefreshToken,
-  setToken,
-  setRefreshToken,
-  removeToken,
-  removeRefreshToken,
-} from '@/lib/auth'
+import { getToken, setToken, removeToken } from '@/lib/auth'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: { 'Content-Type': 'application/json' },
+  // Fix 15: withCredentials allows the browser to send and receive HttpOnly cookies
+  // (the refresh token cookie) on cross-origin requests to the api-gateway.
+  withCredentials: true,
 })
 
 // ── Attach access token on every outgoing request ────────────────────────────
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = getToken()
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
@@ -25,10 +22,11 @@ api.interceptors.request.use((config) => {
 // ── 401 interceptor — refresh + request queue ─────────────────────────────────
 //
 // Strategy:
-//  1. If a 401 arrives and we have a refresh token, attempt one refresh call.
+//  1. If a 401 arrives, attempt one refresh call (no body — HttpOnly cookie is sent
+//     automatically by the browser via withCredentials).
 //  2. All concurrent 401s during the refresh are queued and retried after.
-//  3. If the refresh itself fails (expired/revoked), clear both tokens and
-//     redirect to /login.
+//  3. If the refresh itself fails (token expired/revoked), clear the access token
+//     and redirect to /login.
 //
 // We use a raw axios call for the refresh so it skips this interceptor and
 // never enters an infinite loop.
@@ -48,8 +46,19 @@ function processQueue(err: unknown, token: string | null) {
 }
 
 function logout() {
+  // Best-effort logout call — revokes the refresh token cookie on the server.
+  // We use a fire-and-forget raw axios call so it doesn't trigger this interceptor.
+  axios
+    .post(
+      `${import.meta.env.VITE_API_URL}/api/v1/auth/logout`,
+      {},
+      { withCredentials: true },
+    )
+    .catch(() => {
+      // Ignore errors — session cleanup is best-effort here
+    })
+
   removeToken()
-  removeRefreshToken()
   window.location.href = '/login'
 }
 
@@ -70,14 +79,6 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const refreshToken = getRefreshToken()
-
-    // No refresh token available → hard logout
-    if (!refreshToken) {
-      logout()
-      return Promise.reject(error)
-    }
-
     // A refresh is already in-flight — queue this request
     if (isRefreshing) {
       return new Promise<string>((resolve, reject) => {
@@ -94,13 +95,15 @@ api.interceptors.response.use(
     originalRequest._retry = true
 
     try {
-      const { data } = await axios.post<{ accessToken: string; refreshToken: string }>(
+      // Fix 15: no body needed — the HttpOnly refresh token cookie is sent
+      // automatically by the browser because withCredentials is true.
+      const { data } = await axios.post<{ accessToken: string }>(
         `${import.meta.env.VITE_API_URL}/api/v1/auth/refresh`,
-        { refreshToken },
+        {},
+        { withCredentials: true },
       )
 
       setToken(data.accessToken)
-      setRefreshToken(data.refreshToken)
 
       processQueue(null, data.accessToken)
 

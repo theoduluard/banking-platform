@@ -159,14 +159,22 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class))).thenReturn(loginResponse);
 
         // Act & Assert
+        // Fix 14+15: the refresh token is now set as an HttpOnly cookie and stripped
+        // from the JSON body.  The response must NOT include $.refreshToken.
+        // We use header() matchers for Set-Cookie because MockMvc's cookie() matcher
+        // only reads cookies set via HttpServletResponse.addCookie(), not raw Set-Cookie headers.
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validLoginRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access_token_value"))
-                .andExpect(jsonPath("$.refreshToken").value("refresh_token_value"))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(jsonPath("$.email").value("john.doe@example.com"))
-                .andExpect(jsonPath("$.role").value("CLIENT"));
+                .andExpect(jsonPath("$.role").value("CLIENT"))
+                .andExpect(header().string(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("refreshToken")))
+                .andExpect(header().string(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("HttpOnly")));
     }
 
     @Test

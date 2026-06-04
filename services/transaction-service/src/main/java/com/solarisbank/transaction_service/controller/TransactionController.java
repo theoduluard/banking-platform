@@ -34,10 +34,11 @@ public class TransactionController {
     @GetMapping
     public ResponseEntity<Page<TransactionResponse>> getHistory(
             @RequestParam UUID accountId,
+            @RequestHeader("X-User-Id") UUID userId,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        return ResponseEntity.ok(transactionService.getHistory(accountId, page, size));
+        return ResponseEntity.ok(transactionService.getHistory(accountId, userId, page, size));
     }
 
     @GetMapping("/{id}")

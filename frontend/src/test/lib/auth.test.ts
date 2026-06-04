@@ -6,6 +6,7 @@ import {
   getRefreshToken,
   setRefreshToken,
   removeRefreshToken,
+  setRole,
   isAuthenticated,
   getUserIdFromToken,
   getUserRoleFromToken,
@@ -28,8 +29,15 @@ const ADMIN_TOKEN  = buildJwt({ sub: 'admin-uuid-456', role: 'ADMIN' })
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
 
-beforeEach(() => localStorage.clear())
-afterEach(()  => localStorage.clear())
+// Fix 15: access token moved to sessionStorage — clear both storages
+beforeEach(() => {
+  localStorage.clear()
+  sessionStorage.clear()
+})
+afterEach(() => {
+  localStorage.clear()
+  sessionStorage.clear()
+})
 
 // ── Access token ──────────────────────────────────────────────────────────────
 
@@ -49,36 +57,50 @@ describe('getToken / setToken / removeToken', () => {
     expect(getToken()).toBeNull()
   })
 
-  it('removeToken also clears the refresh token', () => {
+  it('removeToken also clears the role (Fix 16)', () => {
     setToken(CLIENT_TOKEN)
-    setRefreshToken('some-refresh-token')
+    setRole('CLIENT')
     removeToken()
     expect(getToken()).toBeNull()
+    // getRefreshToken is always null (HttpOnly cookie — Fix 15)
     expect(getRefreshToken()).toBeNull()
+  })
+
+  it('migrates a legacy localStorage token to sessionStorage (Fix 15)', () => {
+    // Simulate a token left behind from before the migration
+    localStorage.setItem('token', CLIENT_TOKEN)
+    // getToken() should migrate it transparently
+    expect(getToken()).toBe(CLIENT_TOKEN)
+    // After migration, it should be in sessionStorage, not localStorage
+    expect(sessionStorage.getItem('token')).toBe(CLIENT_TOKEN)
+    expect(localStorage.getItem('token')).toBeNull()
   })
 })
 
-// ── Refresh token ─────────────────────────────────────────────────────────────
+// ── Refresh token (Fix 15: now HttpOnly cookie, JS no-ops) ──────────────────
 
 describe('getRefreshToken / setRefreshToken / removeRefreshToken', () => {
-  it('returns null when no refresh token is stored', () => {
+  it('getRefreshToken always returns null (token is in HttpOnly cookie)', () => {
     expect(getRefreshToken()).toBeNull()
   })
 
-  it('stores and retrieves the refresh token independently of the access token', () => {
+  it('setRefreshToken is a no-op (token is set by the server)', () => {
+    setRefreshToken('rt-abc-123')
+    // Still null — the HttpOnly cookie cannot be read by JS
+    expect(getRefreshToken()).toBeNull()
+    // Access token must remain untouched
     setToken(CLIENT_TOKEN)
     setRefreshToken('rt-abc-123')
-    expect(getRefreshToken()).toBe('rt-abc-123')
+    expect(getToken()).toBe(CLIENT_TOKEN)
+    expect(getRefreshToken()).toBeNull()
+  })
+
+  it('removeRefreshToken is a no-op', () => {
+    setToken(CLIENT_TOKEN)
+    removeRefreshToken()
     // Access token must remain untouched
     expect(getToken()).toBe(CLIENT_TOKEN)
-  })
-
-  it('removeRefreshToken only removes the refresh token', () => {
-    setToken(CLIENT_TOKEN)
-    setRefreshToken('rt-abc-123')
-    removeRefreshToken()
     expect(getRefreshToken()).toBeNull()
-    expect(getToken()).toBe(CLIENT_TOKEN)
   })
 })
 
@@ -119,26 +141,38 @@ describe('getUserIdFromToken', () => {
   })
 })
 
-// ── getUserRoleFromToken ──────────────────────────────────────────────────────
+// ── getUserRoleFromToken (Fix 16) ─────────────────────────────────────────────
 
 describe('getUserRoleFromToken', () => {
-  it('returns null when no token', () => {
+  it('returns null when no token and no role in sessionStorage', () => {
     expect(getUserRoleFromToken()).toBeNull()
   })
 
-  it('returns CLIENT for a client token', () => {
+  it('returns the role from sessionStorage when set via setRole (Fix 16)', () => {
+    setRole('CLIENT')
+    // No JWT needed — role comes from sessionStorage
+    expect(getUserRoleFromToken()).toBe('CLIENT')
+  })
+
+  it('returns ADMIN from sessionStorage when set via setRole (Fix 16)', () => {
+    setRole('ADMIN')
+    expect(getUserRoleFromToken()).toBe('ADMIN')
+  })
+
+  it('falls back to JWT role claim when sessionStorage role is absent', () => {
+    // Simulates a hard page reload after login (sessionStorage cleared)
     setToken(CLIENT_TOKEN)
     expect(getUserRoleFromToken()).toBe('CLIENT')
   })
 
-  it('returns ADMIN for an admin token', () => {
+  it('falls back to JWT ADMIN role when sessionStorage is absent', () => {
     setToken(ADMIN_TOKEN)
     expect(getUserRoleFromToken()).toBe('ADMIN')
   })
 
-  it('returns null for a malformed token', () => {
-    localStorage.setItem('token', 'not.a.jwt')
-    // decodePayload catches the error and returns null → getUserRoleFromToken returns null
+  it('returns null for a malformed token and no sessionStorage role', () => {
+    // Put a bad token in sessionStorage directly (migration path)
+    sessionStorage.setItem('token', 'not.a.jwt')
     expect(getUserRoleFromToken()).toBeNull()
   })
 })

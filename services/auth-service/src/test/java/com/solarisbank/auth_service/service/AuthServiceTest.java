@@ -4,7 +4,9 @@ import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
+import com.solarisbank.auth_service.model.RefreshToken;
 import com.solarisbank.auth_service.model.User;
+import com.solarisbank.auth_service.repository.RefreshTokenRepository;
 import com.solarisbank.auth_service.repository.UserRepository;
 import com.solarisbank.auth_service.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +46,10 @@ class AuthServiceTest {
 
     @Mock
     private EmailService emailService;
+
+    // Fix 14: AuthService now stores refresh token hashes in DB
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -136,7 +142,9 @@ class AuthServiceTest {
         when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(savedUser));
         when(jwtService.generateAccessToken(anyString(), anyString(), any(UUID.class)))
                 .thenReturn("access_token");
-        when(jwtService.generateRefreshToken(anyString())).thenReturn("refresh_token");
+        // Fix 14: refresh token is now a DB-backed opaque token; save() is mocked implicitly
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
 
         // Act
         LoginResponse response = authService.login(loginRequest);
@@ -144,7 +152,8 @@ class AuthServiceTest {
         // Assert
         assertThat(response).isNotNull();
         assertThat(response.getAccessToken()).isEqualTo("access_token");
-        assertThat(response.getRefreshToken()).isEqualTo("refresh_token");
+        // The refresh token is now a random opaque UUID — just verify it is present
+        assertThat(response.getRefreshToken()).isNotNull().isNotBlank();
         assertThat(response.getEmail()).isEqualTo("john.doe@example.com");
         assertThat(response.getFirstname()).isEqualTo("John");
         assertThat(response.getLastname()).isEqualTo("Doe");
@@ -156,7 +165,8 @@ class AuthServiceTest {
         // Arrange
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(savedUser));
         when(jwtService.generateAccessToken(anyString(), anyString(), any())).thenReturn("token");
-        when(jwtService.generateRefreshToken(anyString())).thenReturn("refresh");
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
 
         // Act
         authService.login(loginRequest);
@@ -188,13 +198,14 @@ class AuthServiceTest {
         when(authenticationManager.authenticate(any())).thenReturn(null);
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(savedUser));
         when(jwtService.generateAccessToken(anyString(), anyString(), any())).thenReturn("token");
-        when(jwtService.generateRefreshToken(anyString())).thenReturn("refresh");
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
 
         // Act
         authService.login(loginRequest);
 
-        // Assert
+        // Assert — Fix 14: refresh token is now opaque (no generateRefreshToken call)
         verify(jwtService).generateAccessToken("john.doe@example.com", "CLIENT", userId);
-        verify(jwtService).generateRefreshToken("john.doe@example.com");
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 }

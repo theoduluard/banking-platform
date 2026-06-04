@@ -2,6 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { removeToken, getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
+import axios from 'axios'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ArrowLeftRight, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -28,7 +29,20 @@ export default function Navbar() {
     refetchInterval: 60_000,
   })
 
-  function handleLogout() {
+  async function handleLogout() {
+    // Fix 14: revoke the refresh token on the server before clearing local state.
+    // The HttpOnly cookie is sent automatically (withCredentials) so no token
+    // needs to be passed in the body.  Errors are silently ignored so a network
+    // blip never leaves the user stuck on the current page.
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/v1/auth/logout`,
+        {},
+        { withCredentials: true },
+      )
+    } catch {
+      // Best-effort — always clear local state regardless
+    }
     removeToken()
     navigate('/login')
   }

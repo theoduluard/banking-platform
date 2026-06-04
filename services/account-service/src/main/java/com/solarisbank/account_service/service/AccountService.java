@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -120,12 +122,22 @@ public class AccountService {
         account.setStatus(Account.Status.ACTIVE);
         AccountResponse response = toResponse(accountRepository.save(account));
 
-        eventProducer.publishAccountApproved(new AccountApprovedEvent(
+        // Fix 17: publish Kafka event only after the DB transaction is committed.
+        // Registering a synchronization here guarantees afterCommit() is called once
+        // the surrounding @Transactional has successfully flushed to the database.
+        // If the transaction rolls back the event is never published.
+        AccountApprovedEvent approvedEvent = new AccountApprovedEvent(
                 account.getAccountId(),
                 account.getUserId(),
                 account.getIban(),
                 account.getType().name()
-        ));
+        );
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                eventProducer.publishAccountApproved(approvedEvent);
+            }
+        });
 
         return response;
     }
@@ -142,12 +154,19 @@ public class AccountService {
         account.setStatus(Account.Status.REJECTED);
         AccountResponse response = toResponse(accountRepository.save(account));
 
-        eventProducer.publishAccountRejected(new AccountRejectedEvent(
+        // Fix 17: same pattern as approveAccount — publish after commit.
+        AccountRejectedEvent rejectedEvent = new AccountRejectedEvent(
                 account.getAccountId(),
                 account.getUserId(),
                 account.getIban(),
                 account.getType().name()
-        ));
+        );
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                eventProducer.publishAccountRejected(rejectedEvent);
+            }
+        });
 
         return response;
     }
@@ -204,7 +223,6 @@ public class AccountService {
      * Saves a ProcessedSagaEvent atomically with the balance update so that a
      * redelivered DebitRequested message is detected and skipped without touching
      * the balance a second time.
-     *
      * Fix 13: delegates to debit() instead of duplicating its logic. Both methods
      * share the same @Transactional context (PROPAGATION.REQUIRED), so the
      * pessimistic lock acquired inside debit() is part of this transaction.
@@ -247,7 +265,6 @@ public class AccountService {
     /**
      * Saga-aware credit: idempotent version called from the Kafka consumer.
      * Saves a ProcessedSagaEvent atomically with the balance update.
-     *
      * Fix 13: delegates to credit() for the same reason as debitFromSaga().
      */
     @Transactional

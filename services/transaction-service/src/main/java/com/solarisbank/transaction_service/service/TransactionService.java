@@ -86,8 +86,19 @@ public class TransactionService {
         return toResponse(transaction);
     }
 
+    /**
+     * Fix 19: ownership check before returning history.
+     * Calling accountClient.getAccount(accountId, userId) performs a
+     * findByAccountIdAndUserId in account-service — if the account doesn't
+     * belong to this user it throws a 404 which propagates as a BusinessException.
+     * This closes the IDOR that allowed any authenticated user to read any
+     * account's transaction history by guessing a UUID.
+     */
     @Transactional(readOnly = true)
-    public Page<TransactionResponse> getHistory(UUID accountId, int page, int size) {
+    public Page<TransactionResponse> getHistory(UUID accountId, UUID userId, int page, int size) {
+        // Validates ownership — throws BusinessException(NOT_FOUND) if accountId ∉ userId
+        accountClient.getAccount(accountId, userId);
+
         Pageable pageable = PageRequest.of(page, size);
         return transactionRepository
                 .findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(accountId, accountId, pageable)
@@ -115,7 +126,6 @@ public class TransactionService {
     /**
      * Admin deposit: credit the target account and record a DEPOSIT transaction.
      * Synchronous — no Kafka saga. The balance is updated immediately.
-     *
      * Order: save the audit record first (inside @Transactional), then call account-service.
      * If the account-service call throws, @Transactional rolls back the audit record,
      * leaving the DB clean. The residual risk (DB commit fails after REST succeeds) is

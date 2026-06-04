@@ -69,9 +69,14 @@ public class AccountController {
      * Resolves an IBAN to an account ID.
      * Used by the frontend to look up the destination account before a transfer.
      * Only returns the account ID — no balance, no status (privacy).
+     * Fix 18: require X-User-Id so only authenticated users can call this endpoint.
+     * Without it, any unauthenticated caller could enumerate accounts by probing
+     * predictable IBANs. The header is already injected by the api-gateway JWT filter.
      */
     @GetMapping("/iban/{iban}")
-    public ResponseEntity<Map<String, String>> getByIban(@PathVariable String iban) {
+    public ResponseEntity<Map<String, String>> getByIban(
+            @PathVariable String iban,
+            @RequestHeader("X-User-Id") UUID userId) {
         return accountService.findByIban(iban)
                 .map(acc -> ResponseEntity.ok(Map.of("accountId", acc.getAccountId().toString())))
                 .orElse(ResponseEntity.notFound().build());
@@ -117,7 +122,6 @@ public class AccountController {
      * Unlike /debit (which is ownership-checked via X-User-Id + findByAccountIdAndUserId),
      * /credit performs no ownership validation — any authenticated user reaching it could
      * credit any account arbitrarily.
-     *
      * Mitigation: require the X-Internal-Secret header, which is only known to backend services.
      * A regular JWT user routed through the api-gateway carries a valid X-User-Id but NOT
      * the internal secret, so they cannot reach this endpoint.
