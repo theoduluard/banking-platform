@@ -43,6 +43,8 @@ jobs:
 
       - name: Build & Test
         working-directory: services/auth-service
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: ./mvnw verify
 
       - name: Upload coverage report
@@ -94,6 +96,8 @@ jobs:
 
       - name: Build & Test
         working-directory: services/account-service
+        env:
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
         run: ./mvnw verify
 
       - name: Upload coverage report
@@ -163,6 +167,8 @@ jobs:
 
       - name: Build & Test
         working-directory: services/transaction-service
+        env:
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
         run: ./mvnw verify
 
       - name: Upload coverage report
@@ -232,6 +238,8 @@ jobs:
 
       - name: Build & Test
         working-directory: services/messaging-service
+        env:
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
         run: ./mvnw verify
 
       - name: Upload JAR
@@ -261,6 +269,8 @@ jobs:
 
       - name: Build & Test
         working-directory: services/api-gateway
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: ./mvnw verify
 
       - name: Upload coverage report

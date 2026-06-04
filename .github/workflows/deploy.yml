@@ -15,6 +15,8 @@ on:
 #   NAS_PORT         – SSH port (default 22)
 #   NAS_DEPLOY_PATH  – Absolute path on the NAS where docker-compose.prod.yml lives
 #   GHCR_TOKEN          – GitHub PAT with read:packages scope (for NAS to pull images)
+#   JWT_SECRET          – HS256 signing key for JWT tokens (openssl rand -base64 32)
+#   INTERNAL_SECRET     – Shared secret for inter-service auth (openssl rand -hex 32)
 #   ADMIN_EMAIL         – Bootstrap admin account email
 #   ADMIN_PASSWORD      – Bootstrap admin account password (strong)
 #   GRAFANA_PASSWORD    – Grafana admin password (optional — defaults to "admin" if not set)
@@ -140,7 +142,7 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL
+          envs: GHCR_TOKEN,REPO_OWNER,JWT_SECRET,INTERNAL_SECRET,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL
           script: |
             set -e
 
@@ -154,6 +156,8 @@ jobs:
               echo "Pull attempt $i failed, retrying in 15s…"
               sleep 15
             done
+            JWT_SECRET="$JWT_SECRET" \
+            INTERNAL_SECRET="$INTERNAL_SECRET" \
             ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
             GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}" \
             GRAFANA_PUBLIC_URL="${GRAFANA_PUBLIC_URL:-http://localhost:3000}" \
@@ -170,6 +174,8 @@ jobs:
         env:
           GHCR_TOKEN:           ${{ secrets.GHCR_TOKEN }}
           REPO_OWNER:           ${{ github.repository_owner }}
+          JWT_SECRET:           ${{ secrets.JWT_SECRET }}
+          INTERNAL_SECRET:      ${{ secrets.INTERNAL_SECRET }}
           ADMIN_EMAIL:          ${{ secrets.ADMIN_EMAIL }}
           ADMIN_PASSWORD:       ${{ secrets.ADMIN_PASSWORD }}
           GRAFANA_PASSWORD:     ${{ secrets.GRAFANA_PASSWORD }}
