@@ -6,8 +6,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import api from '@/lib/api'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import PasswordInput from '@/components/ui/password-input'
 import Logo from '@/components/Logo'
 import AuthBrandPanel from '@/components/AuthBrandPanel'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
@@ -144,9 +144,8 @@ export default function ResetPasswordPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div className="space-y-1.5">
                 <Label htmlFor="password" className="text-sm font-medium">Nouveau mot de passe</Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   className="h-11"
                   {...register('password')}
                 />
@@ -157,9 +156,8 @@ export default function ResetPasswordPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirmer le mot de passe</Label>
-                <Input
+                <PasswordInput
                   id="confirmPassword"
-                  type="password"
                   className="h-11"
                   {...register('confirmPassword')}
                 />

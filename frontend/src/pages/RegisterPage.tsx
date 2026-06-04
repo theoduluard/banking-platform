@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import PasswordInput from '@/components/ui/password-input'
 import Logo from '@/components/Logo'
 import AuthBrandPanel from '@/components/AuthBrandPanel'
 import { MailCheck, CheckCircle2 } from 'lucide-react'
@@ -136,7 +137,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="password" className="text-sm font-medium">Mot de passe</Label>
-                  <Input id="password" type="password" className="h-11" {...register('password')} />
+                  <PasswordInput id="password" className="h-11" {...register('password')} />
                   {errors.password && (
                     <p className="text-xs text-destructive leading-relaxed">{errors.password.message}</p>
                   )}
@@ -144,7 +145,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirmer le mot de passe</Label>
-                  <Input id="confirmPassword" type="password" className="h-11" {...register('confirmPassword')} />
+                  <PasswordInput id="confirmPassword" className="h-11" {...register('confirmPassword')} />
                   {errors.confirmPassword && (
                     <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
                   )}

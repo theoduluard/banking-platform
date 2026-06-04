@@ -11,9 +11,9 @@ import { setToken, setRefreshToken, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import PasswordInput from '@/components/ui/password-input'
 import Logo from '@/components/Logo'
 import type { AuthResponse } from '@/types'
-import { cn } from '@/lib/utils'
 
 const schema = z.object({
   email:    z.string().email('Email invalide'),
@@ -209,18 +209,12 @@ export default function LoginPage() {
                   Mot de passe oublié ?
                 </button>
               </div>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 className="h-11"
                 {...register('password', { onChange: () => setLoginError(null) })}
               />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-              {!emailValue?.trim() && (
-                <p className={cn('text-xs text-amber-600')}>
-                  Saisissez votre adresse email ci-dessus pour réinitialiser votre mot de passe.
-                </p>
-              )}
             </div>
 
             <Button
