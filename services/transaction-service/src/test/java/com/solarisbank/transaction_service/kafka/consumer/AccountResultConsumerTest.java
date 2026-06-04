@@ -49,6 +49,8 @@ class AccountResultConsumerTest {
 
     private UUID transactionId;
     private Transaction pendingTransaction;
+    // Used by onCreditResult tests: the consumer guard requires DEBIT_CONFIRMED
+    private Transaction debitConfirmedTransaction;
 
     @BeforeEach
     void setUp() {
@@ -63,6 +65,19 @@ class AccountResultConsumerTest {
                 .currency("EUR")
                 .type(Transaction.Type.TRANSFER)
                 .status(Transaction.Status.PENDING)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        // Same data but already past the DEBIT_CONFIRMED transition (Fix 5)
+        debitConfirmedTransaction = Transaction.builder()
+                .id(transactionId)
+                .fromAccountId(pendingTransaction.getFromAccountId())
+                .toAccountId(pendingTransaction.getToAccountId())
+                .initiatedByUserId(pendingTransaction.getInitiatedByUserId())
+                .amount(new BigDecimal("150.00"))
+                .currency("EUR")
+                .type(Transaction.Type.TRANSFER)
+                .status(Transaction.Status.DEBIT_CONFIRMED)
                 .createdAt(LocalDateTime.now())
                 .build();
     }
@@ -80,7 +95,9 @@ class AccountResultConsumerTest {
         consumer.onDebitResult(payload);
 
         verify(sagaEventProducer).publishCreditRequest(any(CreditRequestedEvent.class));
-        verify(transactionRepository, never()).save(any());
+        // Fix 5: consumer saves DEBIT_CONFIRMED before publishing CreditRequested
+        verify(transactionRepository).save(argThat(t ->
+                t.getStatus() == Transaction.Status.DEBIT_CONFIRMED));
     }
 
     @Test
@@ -135,8 +152,9 @@ class AccountResultConsumerTest {
         String payload = objectMapper.writeValueAsString(
                 new CreditResultEvent(transactionId, true, null));
 
+        // Fix 5: onCreditResult guard requires status == DEBIT_CONFIRMED
         when(transactionRepository.findById(transactionId))
-                .thenReturn(Optional.of(pendingTransaction));
+                .thenReturn(Optional.of(debitConfirmedTransaction));
 
         consumer.onCreditResult(payload);
 
@@ -150,8 +168,9 @@ class AccountResultConsumerTest {
         String payload = objectMapper.writeValueAsString(
                 new CreditResultEvent(transactionId, false, "Account blocked"));
 
+        // Fix 5: onCreditResult guard requires status == DEBIT_CONFIRMED
         when(transactionRepository.findById(transactionId))
-                .thenReturn(Optional.of(pendingTransaction));
+                .thenReturn(Optional.of(debitConfirmedTransaction));
 
         consumer.onCreditResult(payload);
 

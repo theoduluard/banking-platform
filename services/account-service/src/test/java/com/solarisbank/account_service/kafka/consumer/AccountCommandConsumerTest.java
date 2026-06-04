@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.account_service.kafka.event.CreditRequestedEvent;
 import com.solarisbank.account_service.kafka.event.DebitRequestedEvent;
 import com.solarisbank.account_service.kafka.producer.AccountEventProducer;
+import com.solarisbank.account_service.repository.ProcessedSagaEventRepository;
 import com.solarisbank.account_service.service.AccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +32,9 @@ class AccountCommandConsumerTest {
 
     @Mock
     private AccountEventProducer accountEventProducer;
+
+    @Mock
+    private ProcessedSagaEventRepository processedEventRepository;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper()
@@ -59,8 +64,7 @@ class AccountCommandConsumerTest {
         DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
-        doNothing().when(accountService).debit(accountId, userId, amount);
-
+        // debitFromSaga is a void method — default Mockito behaviour (do-nothing) is sufficient
         consumer.onDebitRequested(payload);
 
         verify(accountEventProducer).publishDebitResult(argThat(r ->
@@ -72,8 +76,9 @@ class AccountCommandConsumerTest {
         DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
+        // Consumer calls debitFromSaga, not debit directly (Fix 13)
         doThrow(new RuntimeException("Insufficient funds"))
-                .when(accountService).debit(accountId, userId, amount);
+                .when(accountService).debitFromSaga(eq(transactionId), eq(accountId), eq(userId), eq(amount));
 
         consumer.onDebitRequested(payload);
 
@@ -100,8 +105,7 @@ class AccountCommandConsumerTest {
         CreditRequestedEvent event = new CreditRequestedEvent(transactionId, toAccountId, fromAccountId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
-        doNothing().when(accountService).credit(toAccountId, amount);
-
+        // creditFromSaga is a void method — default Mockito behaviour (do-nothing) is sufficient
         consumer.onCreditRequested(payload);
 
         verify(accountEventProducer).publishCreditResult(argThat(r ->
@@ -115,8 +119,9 @@ class AccountCommandConsumerTest {
         CreditRequestedEvent event = new CreditRequestedEvent(transactionId, toAccountId, fromAccountId, amount);
         String payload = objectMapper.writeValueAsString(event);
 
+        // Consumer calls creditFromSaga, not credit directly (Fix 13)
         doThrow(new RuntimeException("Account blocked"))
-                .when(accountService).credit(toAccountId, amount);
+                .when(accountService).creditFromSaga(eq(transactionId), eq(toAccountId), eq(amount));
 
         consumer.onCreditRequested(payload);
 

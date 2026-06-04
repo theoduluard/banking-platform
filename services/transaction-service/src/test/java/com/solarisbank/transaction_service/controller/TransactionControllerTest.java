@@ -112,6 +112,7 @@ class TransactionControllerTest {
         when(transactionService.getHistory(fromAccountId, 0, 20)).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/transactions")
+                        .header("X-User-Id", userId.toString())
                         .param("accountId", fromAccountId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(transactionId.toString()));
@@ -157,6 +158,7 @@ class TransactionControllerTest {
                 .thenThrow(new RuntimeException("Unexpected error"));
 
         mockMvc.perform(get("/api/v1/transactions")
+                        .header("X-User-Id", userId.toString())
                         .param("accountId", fromAccountId.toString()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500));

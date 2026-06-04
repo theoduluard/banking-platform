@@ -9,6 +9,7 @@ import com.solarisbank.account_service.model.Account;
 import com.solarisbank.account_service.service.AccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,6 +37,9 @@ class AccountControllerTest {
 
     @MockitoBean
     private AccountService accountService;
+
+    @Value("${internal.secret}")
+    private String internalSecret;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -157,6 +161,7 @@ class AccountControllerTest {
         doNothing().when(accountService).credit(eq(accountId), any());
 
         mockMvc.perform(post("/api/v1/accounts/{id}/credit", accountId)
+                        .header("X-Internal-Secret", internalSecret)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("amount", "200.00"))))
                 .andExpect(status().isNoContent());

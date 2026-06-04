@@ -172,7 +172,7 @@ class AccountServiceTest {
 
     @Test
     void debit_shouldSubtractBalance_whenSufficientFunds() {
-        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+        when(accountRepository.findWithLockByAccountIdAndUserId(accountId, userId))
                 .thenReturn(Optional.of(activeAccount));
         when(accountRepository.save(any())).thenReturn(activeAccount);
 
@@ -184,7 +184,7 @@ class AccountServiceTest {
 
     @Test
     void debit_shouldThrowNotFound_whenAccountNotFound() {
-        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+        when(accountRepository.findWithLockByAccountIdAndUserId(accountId, userId))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> accountService.debit(accountId, userId, new BigDecimal("100.00")))
@@ -195,7 +195,7 @@ class AccountServiceTest {
     @Test
     void debit_shouldThrow_whenAccountNotActive() {
         activeAccount.setStatus(Account.Status.BLOCKED);
-        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+        when(accountRepository.findWithLockByAccountIdAndUserId(accountId, userId))
                 .thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> accountService.debit(accountId, userId, new BigDecimal("100.00")))
@@ -205,7 +205,7 @@ class AccountServiceTest {
 
     @Test
     void debit_shouldThrow_whenInsufficientFunds() {
-        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+        when(accountRepository.findWithLockByAccountIdAndUserId(accountId, userId))
                 .thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> accountService.debit(accountId, userId, new BigDecimal("999.00")))
@@ -217,7 +217,7 @@ class AccountServiceTest {
 
     @Test
     void credit_shouldAddBalance_whenAccountActive() {
-        when(accountRepository.findById(accountId))
+        when(accountRepository.findWithLockById(accountId))
                 .thenReturn(Optional.of(activeAccount));
         when(accountRepository.save(any())).thenReturn(activeAccount);
 
@@ -229,7 +229,7 @@ class AccountServiceTest {
 
     @Test
     void credit_shouldThrowNotFound_whenAccountNotFound() {
-        when(accountRepository.findById(accountId)).thenReturn(Optional.empty());
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> accountService.credit(accountId, new BigDecimal("100.00")))
                 .isInstanceOf(BusinessException.class)
@@ -239,7 +239,7 @@ class AccountServiceTest {
     @Test
     void credit_shouldThrow_whenAccountNotActive() {
         activeAccount.setStatus(Account.Status.CLOSED);
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> accountService.credit(accountId, new BigDecimal("100.00")))
                 .isInstanceOf(BusinessException.class)
