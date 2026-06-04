@@ -32,7 +32,6 @@ export default function LoginPage() {
   const [unverifiedEmail, setUnverifiedEmail]   = useState<string | null>(null)
   const [loginError,      setLoginError]        = useState<string | null>(null)
   const [resending,       setResending]         = useState(false)
-  const [forgotHint,      setForgotHint]        = useState(false)
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -203,11 +202,6 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!emailValue?.trim()) {
-                      setForgotHint(true)
-                      return
-                    }
-                    setForgotHint(false)
                     navigate(`/forgot-password?email=${encodeURIComponent(emailValue.trim())}`)
                   }}
                   className="text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
@@ -222,7 +216,7 @@ export default function LoginPage() {
                 {...register('password', { onChange: () => setLoginError(null) })}
               />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-              {forgotHint && !emailValue?.trim() && (
+              {!emailValue?.trim() && (
                 <p className={cn('text-xs text-amber-600')}>
                   Saisissez votre adresse email ci-dessus pour réinitialiser votre mot de passe.
                 </p>
