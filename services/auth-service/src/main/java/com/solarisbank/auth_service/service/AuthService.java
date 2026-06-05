@@ -19,6 +19,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.scheduling.annotation.Scheduled;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -210,6 +212,21 @@ public class AuthService {
         String hash = sha256(rawRefreshToken);
         refreshTokenRepository.deleteByTokenHash(hash);
         log.info("[Logout] Refresh token revoked");
+    }
+
+    // ── Housekeeping ──────────────────────────────────────────────────────────
+
+    /**
+     * Deletes expired refresh tokens every day at 03:00.
+     * Keeps the refresh_tokens table from growing indefinitely — tokens that have
+     * passed their expiry are dead anyway (the expiry check in refresh() rejects them),
+     * so they are safe to purge at any time.
+     */
+    @Scheduled(cron = "0 0 3 * * *")
+    @Transactional
+    public void cleanupExpiredTokens() {
+        int deleted = refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+        log.info("[Cleanup] Purged {} expired refresh token(s)", deleted);
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────

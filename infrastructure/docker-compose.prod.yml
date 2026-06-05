@@ -119,7 +119,7 @@ services:
       JWT_REFRESH_EXPIRATION:        ${JWT_REFRESH_EXPIRATION}
       ADMIN_EMAIL:                   ${ADMIN_EMAIL}
       ADMIN_PASSWORD:                ${ADMIN_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       # SMTP — Brevo by default (override with any SMTP provider)
       SMTP_HOST:                     ${SMTP_HOST:-smtp-relay.brevo.com}
       SMTP_PORT:                     ${SMTP_PORT:-587}
@@ -146,7 +146,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET:                    ${JWT_SECRET}
       INTERNAL_SECRET:               ${INTERNAL_SECRET}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     networks:
       - banking-net
 
@@ -166,7 +166,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL:           http://account-service:8082
       INTERNAL_SECRET:               ${INTERNAL_SECRET}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     networks:
       - banking-net
 

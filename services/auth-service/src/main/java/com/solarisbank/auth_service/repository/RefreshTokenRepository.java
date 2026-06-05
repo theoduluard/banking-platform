@@ -19,6 +19,6 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     /** Revoke all sessions for a given user (e.g. password change, account suspension). */
     void deleteByUser(User user);
 
-    /** Periodic cleanup: remove tokens that have already expired. */
-    void deleteByExpiresAtBefore(LocalDateTime cutoff);
+    /** Periodic cleanup: remove tokens that have already expired. Returns deleted count. */
+    int deleteByExpiresAtBefore(LocalDateTime cutoff);
 }
