@@ -1,6 +1,6 @@
 -- auth-service initial schema
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     user_id                          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     email                            VARCHAR(255) NOT NULL UNIQUE,
     lastname                         VARCHAR(255) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE users (
     password_reset_token_expiry      TIMESTAMP
 );
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     token_hash  VARCHAR(255) NOT NULL UNIQUE,
     user_id     UUID         NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -24,5 +24,5 @@ CREATE TABLE refresh_tokens (
     created_at  TIMESTAMP    NOT NULL
 );
 
-CREATE INDEX idx_refresh_tokens_user_id  ON refresh_tokens(user_id);
-CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id    ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
