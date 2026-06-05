@@ -8,6 +8,7 @@ import Layout            from '@/components/Layout'
 import AdminLayout       from '@/components/AdminLayout'
 
 import LoginPage            from '@/pages/LoginPage'
+import OtpVerificationPage  from '@/pages/OtpVerificationPage'
 import RegisterPage         from '@/pages/RegisterPage'
 import VerifyEmailPage      from '@/pages/VerifyEmailPage'
 import ForgotPasswordPage   from '@/pages/ForgotPasswordPage'
@@ -44,6 +45,7 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login"            element={<LoginPage />} />
+          <Route path="/verify-otp"       element={<OtpVerificationPage />} />
           <Route path="/register"         element={<RegisterPage />} />
           <Route path="/verify-email"     element={<VerifyEmailPage />} />
           <Route path="/forgot-password"  element={<ForgotPasswordPage />} />

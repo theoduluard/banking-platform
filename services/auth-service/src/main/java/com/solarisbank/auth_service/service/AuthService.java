@@ -2,10 +2,13 @@ package com.solarisbank.auth_service.service;
 
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
+import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
+import com.solarisbank.auth_service.model.OtpChallenge;
 import com.solarisbank.auth_service.model.RefreshToken;
 import com.solarisbank.auth_service.model.User;
+import com.solarisbank.auth_service.repository.OtpChallengeRepository;
 import com.solarisbank.auth_service.repository.RefreshTokenRepository;
 import com.solarisbank.auth_service.repository.UserRepository;
 import com.solarisbank.auth_service.security.JwtService;
@@ -13,17 +16,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.springframework.scheduling.annotation.Scheduled;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -32,12 +35,21 @@ import java.util.UUID;
 @Slf4j
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
-    private final EmailService emailService;
+    private final UserRepository         userRepository;
+    private final PasswordEncoder        passwordEncoder;
+    private final AuthenticationManager  authenticationManager;
+    private final JwtService             jwtService;
+    private final EmailService           emailService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OtpChallengeRepository otpChallengeRepository;
+
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    /** OTP validity window in minutes. */
+    private static final int OTP_VALIDITY_MINUTES = 10;
+
+    /** Maximum wrong-code attempts before the challenge is voided. */
+    private static final int OTP_MAX_ATTEMPTS = 3;
 
     /**
      * Refresh-expiration from application.properties (milliseconds).
@@ -70,7 +82,12 @@ public class AuthService {
         return user;
     }
 
-    public LoginResponse login(LoginRequest request) {
+    /**
+     * Step 1 of login: validates credentials, generates a 6-digit OTP, sends it by
+     * email, and returns an opaque session token the frontend stores until step 2.
+     */
+    @Transactional
+    public OtpChallengeResponse login(LoginRequest request) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
@@ -84,7 +101,88 @@ public class AuthService {
             throw new BusinessException("Email not verified. Please check your inbox.", HttpStatus.FORBIDDEN);
         }
 
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            throw new BusinessException("Account is disabled", HttpStatus.UNAUTHORIZED);
+        }
+
+        // Replace any previous pending challenge for this user
+        otpChallengeRepository.deleteByUser(user);
+
+        String rawCode     = String.format("%06d", secureRandom.nextInt(1_000_000));
+        String sessionToken = UUID.randomUUID().toString();
+
+        otpChallengeRepository.save(OtpChallenge.builder()
+                .sessionToken(sessionToken)
+                .user(user)
+                .codeHash(sha256(rawCode))
+                .attempts(0)
+                .expiresAt(LocalDateTime.now().plusMinutes(OTP_VALIDITY_MINUTES))
+                .build());
+
+        emailService.sendOtpEmail(user.getEmail(), user.getFirstname(), rawCode);
+        log.info("[Login] OTP challenge issued for user={}", user.getEmail());
+
+        return new OtpChallengeResponse(sessionToken);
+    }
+
+    /**
+     * Step 2 of login: validates the OTP code against the stored challenge and,
+     * on success, issues the JWT + refresh token pair.
+     * Tracks failed attempts and voids the challenge after {@value OTP_MAX_ATTEMPTS} failures.
+     */
+    @Transactional
+    public LoginResponse verifyOtp(String sessionToken, String code) {
+        OtpChallenge challenge = otpChallengeRepository.findBySessionToken(sessionToken)
+                .orElseThrow(() -> new BusinessException(
+                        "Invalid or expired OTP session. Please log in again.", HttpStatus.UNAUTHORIZED));
+
+        if (challenge.getExpiresAt().isBefore(LocalDateTime.now())) {
+            otpChallengeRepository.delete(challenge);
+            throw new BusinessException(
+                    "OTP code has expired. Please log in again.", HttpStatus.GONE);
+        }
+
+        if (!challenge.getCodeHash().equals(sha256(code))) {
+            int remaining = OTP_MAX_ATTEMPTS - challenge.getAttempts() - 1;
+            if (remaining <= 0) {
+                otpChallengeRepository.delete(challenge);
+                throw new BusinessException(
+                        "Too many failed attempts. Please log in again.", HttpStatus.UNAUTHORIZED);
+            }
+            challenge.setAttempts(challenge.getAttempts() + 1);
+            otpChallengeRepository.save(challenge);
+            throw new BusinessException(
+                    "Invalid code. " + remaining + " attempt(s) remaining.", HttpStatus.UNAUTHORIZED);
+        }
+
+        User user = challenge.getUser();
+        otpChallengeRepository.delete(challenge);
+
+        log.info("[OTP] Verified for user={}", user.getEmail());
         return buildLoginResponse(user);
+    }
+
+    /**
+     * Regenerates a fresh 6-digit code for an existing OTP session.
+     * Resets the expiry and the attempt counter.
+     */
+    @Transactional
+    public void resendOtp(String sessionToken) {
+        OtpChallenge challenge = otpChallengeRepository.findBySessionToken(sessionToken)
+                .orElseThrow(() -> new BusinessException(
+                        "Invalid or expired OTP session. Please log in again.", HttpStatus.UNAUTHORIZED));
+
+        String rawCode = String.format("%06d", secureRandom.nextInt(1_000_000));
+        challenge.setCodeHash(sha256(rawCode));
+        challenge.setAttempts(0);
+        challenge.setExpiresAt(LocalDateTime.now().plusMinutes(OTP_VALIDITY_MINUTES));
+        otpChallengeRepository.save(challenge);
+
+        emailService.sendOtpEmail(
+                challenge.getUser().getEmail(),
+                challenge.getUser().getFirstname(),
+                rawCode);
+        log.info("[OTP] Code resent for user={}", challenge.getUser().getEmail());
     }
 
     // ── Email verification ────────────────────────────────────────────────────
@@ -225,8 +323,10 @@ public class AuthService {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void cleanupExpiredTokens() {
-        int deleted = refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
-        log.info("[Cleanup] Purged {} expired refresh token(s)", deleted);
+        int deletedRefresh = refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+        int deletedOtp     = otpChallengeRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+        log.info("[Cleanup] Purged {} refresh token(s) and {} OTP challenge(s)",
+                deletedRefresh, deletedOtp);
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────

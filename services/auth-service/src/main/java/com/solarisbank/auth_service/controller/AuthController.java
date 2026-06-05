@@ -3,9 +3,11 @@ package com.solarisbank.auth_service.controller;
 import com.solarisbank.auth_service.dto.ForgotPasswordRequest;
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
+import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.dto.ResendVerificationRequest;
 import com.solarisbank.auth_service.dto.ResetPasswordRequest;
+import com.solarisbank.auth_service.dto.VerifyOtpRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.service.AuthService;
@@ -45,24 +47,45 @@ public class AuthController {
     }
 
     /**
-     * The refresh token is returned as an HttpOnly, SameSite=Lax cookie instead of
-     * a JSON body field.  This prevents JavaScript (XSS) from accessing or
-     * exfiltrating the refresh token.
-     * The role value is included in the response body so the frontend can store it
-     * in sessionStorage and avoid unsafe client-side JWT decoding.
+     * Step 1 of 2FA login: validates credentials, sends a 6-digit OTP by email, and
+     * returns an opaque session token the frontend uses to identify the challenge.
+     * The actual JWT is issued only after the OTP is verified (see /verify-otp).
      */
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        LoginResponse response = authService.login(request);
+    public ResponseEntity<OtpChallengeResponse> login(@Valid @RequestBody LoginRequest request) {
+        OtpChallengeResponse challenge = authService.login(request);
+        return ResponseEntity.ok(challenge);
+    }
+
+    /**
+     * Step 2 of 2FA login: validates the 6-digit OTP against the stored challenge
+     * and, on success, issues the JWT + sets the HttpOnly refresh-token cookie.
+     */
+    @PostMapping("/verify-otp")
+    public ResponseEntity<LoginResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        LoginResponse response = authService.verifyOtp(request.getSessionToken(), request.getCode());
 
         ResponseCookie cookie = buildRefreshCookie(response.getRefreshToken());
-
-        // Strip the refresh token from the JSON body — it lives in the cookie only
         response.setRefreshToken(null);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(response);
+    }
+
+    /**
+     * Regenerates a fresh 6-digit code for an existing OTP session and resends it
+     * by email.  Rate-limiting is handled at the API Gateway level.
+     */
+    @PostMapping("/resend-otp")
+    public ResponseEntity<Map<String, String>> resendOtp(
+            @RequestBody Map<String, String> body) {
+        String sessionToken = body.get("sessionToken");
+        if (sessionToken == null || sessionToken.isBlank()) {
+            throw new BusinessException("sessionToken is required", HttpStatus.BAD_REQUEST);
+        }
+        authService.resendOtp(sessionToken);
+        return ResponseEntity.ok(Map.of("message", "A new code has been sent to your email."));
     }
 
     /**

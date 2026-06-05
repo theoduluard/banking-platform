@@ -85,5 +85,13 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
 
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    environment:
+      STORAGE_TYPE: mem
+
 volumes:
   grafana-data:

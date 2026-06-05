@@ -76,6 +76,29 @@ public class EmailService {
         }
     }
 
+    /**
+     * Sends the 6-digit OTP code for 2FA login verification.
+     * Falls back to logging the code when SMTP is not configured (development).
+     */
+    public void sendOtpEmail(String toEmail, String firstname, String code) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Votre code de vérification — Solaris Bank");
+            helper.setText(buildOtpHtml(firstname, code), true);
+
+            mailSender.send(message);
+            log.info("[Email] OTP email sent to {}", toEmail);
+
+        } catch (MessagingException | org.springframework.mail.MailException e) {
+            log.warn("[Email] Could not send OTP email to {} ({}). Code: {}",
+                    toEmail, e.getMessage(), code);
+        }
+    }
+
     // ── HTML templates ────────────────────────────────────────────────────────
 
     private String buildHtml(String firstname, String verificationUrl) {
@@ -146,6 +169,71 @@ public class EmailService {
             </body>
             </html>
             """.formatted(firstname, verificationUrl, verificationUrl, verificationUrl);
+    }
+
+    private String buildOtpHtml(String firstname, String code) {
+        return """
+            <!DOCTYPE html>
+            <html lang="fr">
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+            <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif;">
+              <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px;">
+                <tr><td align="center">
+                  <table width="560" cellpadding="0" cellspacing="0"
+                         style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+
+                    <!-- Header -->
+                    <tr>
+                      <td style="background:#1d4ed8;padding:32px 40px;text-align:center;">
+                        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">
+                          Solaris Bank
+                        </h1>
+                      </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                      <td style="padding:40px;">
+                        <p style="margin:0 0 16px;font-size:15px;color:#111827;">Bonjour <strong>%s</strong>,</p>
+                        <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">
+                          Voici votre code de vérification pour vous connecter à Solaris Bank.<br>
+                          Ce code est valable <strong>10 minutes</strong>.
+                        </p>
+
+                        <!-- OTP Code -->
+                        <table cellpadding="0" cellspacing="0" style="margin:0 auto 32px;">
+                          <tr>
+                            <td style="border-radius:12px;background:#f0f4ff;border:2px solid #1d4ed8;
+                                       padding:20px 40px;text-align:center;">
+                              <span style="font-size:36px;font-weight:700;color:#1d4ed8;
+                                           letter-spacing:12px;font-family:monospace;">%s</span>
+                            </td>
+                          </tr>
+                        </table>
+
+                        <p style="margin:0;font-size:13px;color:#6b7280;">
+                          Si vous n'avez pas tenté de vous connecter, ignorez cet email et
+                          votre compte restera sécurisé.
+                        </p>
+                      </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                      <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;">
+                        <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+                          Ne partagez jamais ce code avec quelqu'un.<br>
+                          © Solaris Bank — Démo technique
+                        </p>
+                      </td>
+                    </tr>
+
+                  </table>
+                </td></tr>
+              </table>
+            </body>
+            </html>
+            """.formatted(firstname, code);
     }
 
     private String buildResetHtml(String firstname, String resetUrl) {

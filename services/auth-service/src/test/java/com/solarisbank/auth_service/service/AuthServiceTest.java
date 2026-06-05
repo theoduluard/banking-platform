@@ -2,10 +2,13 @@ package com.solarisbank.auth_service.service;
 
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
+import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
+import com.solarisbank.auth_service.model.OtpChallenge;
 import com.solarisbank.auth_service.model.RefreshToken;
 import com.solarisbank.auth_service.model.User;
+import com.solarisbank.auth_service.repository.OtpChallengeRepository;
 import com.solarisbank.auth_service.repository.RefreshTokenRepository;
 import com.solarisbank.auth_service.repository.UserRepository;
 import com.solarisbank.auth_service.security.JwtService;
@@ -50,6 +53,9 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private OtpChallengeRepository otpChallengeRepository;
+
     @InjectMocks
     private AuthService authService;
 
@@ -76,6 +82,7 @@ class AuthServiceTest {
                 .lastname("Doe")
                 .password("encoded_password")
                 .role(User.Role.CLIENT)
+                .isActive(true)
                 .build();
     }
 
@@ -131,46 +138,34 @@ class AuthServiceTest {
         verify(passwordEncoder).encode("Secret@123");
     }
 
-    // ── login ──────────────────────────────────────────────────────────────────
+    // ── login (step 1) ────────────────────────────────────────────────────────
 
     @Test
-    void login_shouldReturnTokens_whenCredentialsAreValid() {
-        // Arrange
+    void login_shouldReturnOtpChallenge_whenCredentialsAreValid() {
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(null);
         when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(savedUser));
-        when(jwtService.generateAccessToken(anyString(), anyString(), any(UUID.class)))
-                .thenReturn("access_token");
-        // Refresh token is a DB-backed opaque token; save() is mocked implicitly
-        when(refreshTokenRepository.save(any(RefreshToken.class)))
+        when(otpChallengeRepository.save(any(OtpChallenge.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        // Act
-        LoginResponse response = authService.login(loginRequest);
+        OtpChallengeResponse response = authService.login(loginRequest);
 
-        // Assert
         assertThat(response).isNotNull();
-        assertThat(response.getAccessToken()).isEqualTo("access_token");
-        // The refresh token is now a random opaque UUID — just verify it is present
-        assertThat(response.getRefreshToken()).isNotNull().isNotBlank();
-        assertThat(response.getEmail()).isEqualTo("john.doe@example.com");
-        assertThat(response.getFirstname()).isEqualTo("John");
-        assertThat(response.getLastname()).isEqualTo("Doe");
-        assertThat(response.getRole()).isEqualTo("CLIENT");
+        assertThat(response.getStatus()).isEqualTo("OTP_REQUIRED");
+        assertThat(response.getSessionToken()).isNotBlank();
+        verify(otpChallengeRepository).deleteByUser(savedUser);
+        verify(otpChallengeRepository).save(any(OtpChallenge.class));
+        verify(emailService).sendOtpEmail(eq("john.doe@example.com"), eq("John"), anyString());
     }
 
     @Test
     void login_shouldCallAuthenticationManager_withCorrectCredentials() {
-        // Arrange
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(savedUser));
-        when(jwtService.generateAccessToken(anyString(), anyString(), any())).thenReturn("token");
-        when(refreshTokenRepository.save(any(RefreshToken.class)))
+        when(otpChallengeRepository.save(any(OtpChallenge.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        // Act
         authService.login(loginRequest);
 
-        // Assert
         verify(authenticationManager).authenticate(
                 new UsernamePasswordAuthenticationToken("john.doe@example.com", "Secret@123")
         );
@@ -178,33 +173,116 @@ class AuthServiceTest {
 
     @Test
     void login_shouldThrowException_whenAuthenticationFails() {
-        // Arrange
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("Bad credentials"));
 
-        // Act & Assert
         assertThatThrownBy(() -> authService.login(loginRequest))
                 .isInstanceOf(BadCredentialsException.class);
 
         verify(userRepository, never()).findByEmail(anyString());
-        verify(jwtService, never()).generateAccessToken(anyString(), anyString(), any());
+        verify(otpChallengeRepository, never()).save(any());
     }
 
+    // ── verifyOtp (step 2) ────────────────────────────────────────────────────
+
     @Test
-    void login_shouldPassCorrectClaimsToJwtService() {
-        // Arrange
-        UUID userId = savedUser.getUserId();
-        when(authenticationManager.authenticate(any())).thenReturn(null);
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(savedUser));
-        when(jwtService.generateAccessToken(anyString(), anyString(), any())).thenReturn("token");
+    void verifyOtp_shouldReturnTokens_whenCodeIsCorrect() {
+        String sessionToken = "test-session";
+        String rawCode      = "123456";
+
+        // Compute the hash the same way the service does (SHA-256)
+        OtpChallenge challenge = OtpChallenge.builder()
+                .sessionToken(sessionToken)
+                .user(savedUser)
+                .codeHash(sha256ForTest(rawCode))
+                .attempts(0)
+                .expiresAt(java.time.LocalDateTime.now().plusMinutes(10))
+                .build();
+
+        when(otpChallengeRepository.findBySessionToken(sessionToken))
+                .thenReturn(Optional.of(challenge));
+        when(jwtService.generateAccessToken(anyString(), anyString(), any(UUID.class)))
+                .thenReturn("access_token");
         when(refreshTokenRepository.save(any(RefreshToken.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        // Act
-        authService.login(loginRequest);
+        LoginResponse response = authService.verifyOtp(sessionToken, rawCode);
 
-        // Assert — refresh token is opaque (no generateRefreshToken call)
-        verify(jwtService).generateAccessToken("john.doe@example.com", "CLIENT", userId);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        assertThat(response.getAccessToken()).isEqualTo("access_token");
+        assertThat(response.getEmail()).isEqualTo("john.doe@example.com");
+        verify(otpChallengeRepository).delete(challenge);
+    }
+
+    @Test
+    void verifyOtp_shouldThrowUnauthorized_whenCodeIsWrong() {
+        OtpChallenge challenge = OtpChallenge.builder()
+                .sessionToken("s")
+                .user(savedUser)
+                .codeHash(sha256ForTest("999999"))
+                .attempts(0)
+                .expiresAt(java.time.LocalDateTime.now().plusMinutes(10))
+                .build();
+
+        when(otpChallengeRepository.findBySessionToken("s")).thenReturn(Optional.of(challenge));
+        when(otpChallengeRepository.save(any(OtpChallenge.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        assertThatThrownBy(() -> authService.verifyOtp("s", "000000"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid code");
+
+        verify(otpChallengeRepository, never()).delete(any(OtpChallenge.class));
+    }
+
+    @Test
+    void verifyOtp_shouldDeleteChallenge_afterMaxAttempts() {
+        OtpChallenge challenge = OtpChallenge.builder()
+                .sessionToken("s")
+                .user(savedUser)
+                .codeHash(sha256ForTest("999999"))
+                .attempts(2)      // already 2 failed → next failure triggers deletion
+                .expiresAt(java.time.LocalDateTime.now().plusMinutes(10))
+                .build();
+
+        when(otpChallengeRepository.findBySessionToken("s")).thenReturn(Optional.of(challenge));
+
+        assertThatThrownBy(() -> authService.verifyOtp("s", "000000"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Too many failed attempts");
+
+        verify(otpChallengeRepository).delete(challenge);
+    }
+
+    @Test
+    void verifyOtp_shouldThrowGone_whenChallengeIsExpired() {
+        OtpChallenge challenge = OtpChallenge.builder()
+                .sessionToken("s")
+                .user(savedUser)
+                .codeHash(sha256ForTest("123456"))
+                .attempts(0)
+                .expiresAt(java.time.LocalDateTime.now().minusMinutes(1))  // already expired
+                .build();
+
+        when(otpChallengeRepository.findBySessionToken("s")).thenReturn(Optional.of(challenge));
+
+        assertThatThrownBy(() -> authService.verifyOtp("s", "123456"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("expired");
+
+        verify(otpChallengeRepository).delete(challenge);
+    }
+
+    // ── Helper — mirrors AuthService.sha256() ─────────────────────────────────
+
+    private String sha256ForTest(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

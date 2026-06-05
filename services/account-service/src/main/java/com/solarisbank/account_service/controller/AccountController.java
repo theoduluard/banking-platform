@@ -118,6 +118,19 @@ public class AccountController {
     }
 
     /**
+     * Closes the authenticated user's account.
+     * Requires the account to be ACTIVE with a zero balance.
+     * This action is irreversible — a closed account cannot be reopened.
+     */
+    @PostMapping("/{id}/close")
+    public ResponseEntity<AccountResponse> closeAccount(
+            @PathVariable UUID id,
+            @RequestHeader("X-User-Id") UUID userId) {
+
+        return ResponseEntity.ok(accountService.closeAccount(id, userId));
+    }
+
+    /**
      * /credit is an internal endpoint called only by transaction-service.
      * Unlike /debit (which is ownership-checked via X-User-Id + findByAccountIdAndUserId),
      * /credit performs no ownership validation — any authenticated user reaching it could

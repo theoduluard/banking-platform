@@ -245,4 +245,59 @@ class AccountServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("not active");
     }
+
+    // ── closeAccount ───────────────────────────────────────────────────────────
+
+    @Test
+    void closeAccount_shouldSetStatusToClosed_whenActiveWithZeroBalance() {
+        activeAccount.setBalance(BigDecimal.ZERO);
+        Account closedAccount = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.CLOSED).createdAt(LocalDateTime.now())
+                .build();
+
+        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+                .thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any())).thenReturn(closedAccount);
+
+        AccountResponse response = accountService.closeAccount(accountId, userId);
+
+        assertThat(response.getStatus()).isEqualTo(Account.Status.CLOSED);
+        verify(accountRepository).save(argThat(a -> a.getStatus() == Account.Status.CLOSED));
+    }
+
+    @Test
+    void closeAccount_shouldThrowNotFound_whenAccountNotFound() {
+        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.closeAccount(accountId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account not found");
+    }
+
+    @Test
+    void closeAccount_shouldThrowBadRequest_whenAccountNotActive() {
+        activeAccount.setStatus(Account.Status.BLOCKED);
+        activeAccount.setBalance(BigDecimal.ZERO);
+
+        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+                .thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.closeAccount(accountId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Only active accounts can be closed");
+    }
+
+    @Test
+    void closeAccount_shouldThrowBadRequest_whenBalanceNotZero() {
+        // activeAccount already has balance 500.00
+        when(accountRepository.findByAccountIdAndUserId(accountId, userId))
+                .thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.closeAccount(accountId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("balance must be zero");
+    }
 }

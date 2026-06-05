@@ -7,13 +7,12 @@ import { toast } from 'sonner'
 import { ShieldCheck, TrendingUp, Zap, MailWarning, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import api from '@/lib/api'
-import { setToken, setRole, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import PasswordInput from '@/components/ui/password-input'
 import Logo from '@/components/Logo'
-import type { AuthResponse } from '@/types'
+import type { OtpChallengeResponse } from '@/types'
 
 const schema = z.object({
   email:    z.string().email('Email invalide'),
@@ -43,25 +42,10 @@ export default function LoginPage() {
     setUnverifiedEmail(null)
     setLoginError(null)
     try {
-      const res = await api.post<AuthResponse>('/api/v1/auth/login', data)
-      setToken(res.data.accessToken)
-      // Store the role from the response body (server-issued), not from
-      // the unsigned JWT payload — prevents client-side privilege escalation.
-      setRole(res.data.role)
-
-      if (getUserRoleFromToken() === 'ADMIN') {
-        navigate('/admin')
-        return
-      }
-
-      // For clients: check KYC status to decide where to redirect
-      try {
-        const kyc = await api.get<{ submitted: boolean }>('/api/v1/accounts/kyc/status')
-        navigate(kyc.data.submitted ? '/dashboard' : '/onboarding/kyc')
-      } catch {
-        // If the KYC check fails for any reason, fall back to dashboard
-        navigate('/dashboard')
-      }
+      const res = await api.post<OtpChallengeResponse>('/api/v1/auth/login', data)
+      // Store the session token so OtpVerificationPage can pick it up
+      sessionStorage.setItem('otpSessionToken', res.data.sessionToken)
+      navigate('/verify-otp')
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status

@@ -167,6 +167,45 @@ class AccountControllerTest {
                 .andExpect(status().isNoContent());
     }
 
+    // ── POST /api/v1/accounts/{id}/close ─────────────────────────────────────
+
+    @Test
+    void closeAccount_shouldReturn200_whenSuccessful() throws Exception {
+        AccountResponse closed = AccountResponse.builder()
+                .id(accountId).iban("FR7630006000010000000000197")
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.CLOSED).createdAt(LocalDateTime.now()).build();
+
+        when(accountService.closeAccount(accountId, userId)).thenReturn(closed);
+
+        mockMvc.perform(post("/api/v1/accounts/{id}/close", accountId)
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"));
+    }
+
+    @Test
+    void closeAccount_shouldReturn400_whenBalanceNotZero() throws Exception {
+        when(accountService.closeAccount(accountId, userId))
+                .thenThrow(new BusinessException("Account balance must be zero before closing", HttpStatus.BAD_REQUEST));
+
+        mockMvc.perform(post("/api/v1/accounts/{id}/close", accountId)
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Account balance must be zero before closing"));
+    }
+
+    @Test
+    void closeAccount_shouldReturn400_whenAccountNotActive() throws Exception {
+        when(accountService.closeAccount(accountId, userId))
+                .thenThrow(new BusinessException("Only active accounts can be closed", HttpStatus.BAD_REQUEST));
+
+        mockMvc.perform(post("/api/v1/accounts/{id}/close", accountId)
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Only active accounts can be closed"));
+    }
+
     // ── GlobalExceptionHandler — 500 générique ────────────────────────────────
 
     @Test

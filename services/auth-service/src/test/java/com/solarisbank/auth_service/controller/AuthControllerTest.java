@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solarisbank.auth_service.config.SecurityConfig;
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
+import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
+import com.solarisbank.auth_service.dto.VerifyOtpRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.security.JwtAuthFilter;
@@ -23,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -51,10 +54,11 @@ class AuthControllerTest {
     @MockitoBean
     private AuthService authService;
 
-    private RegisterRequest validRegisterRequest;
-    private LoginRequest validLoginRequest;
-    private User registeredUser;
-    private LoginResponse loginResponse;
+    private RegisterRequest    validRegisterRequest;
+    private LoginRequest       validLoginRequest;
+    private User               registeredUser;
+    private OtpChallengeResponse otpChallenge;
+    private LoginResponse      loginResponse;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +79,8 @@ class AuthControllerTest {
                 .lastname("Doe")
                 .role(User.Role.CLIENT)
                 .build();
+
+        otpChallenge = new OtpChallengeResponse("test-session-token");
 
         loginResponse = LoginResponse.builder()
                 .accessToken("access_token_value")
@@ -154,18 +160,47 @@ class AuthControllerTest {
     // ── POST /api/v1/auth/login ────────────────────────────────────────────────
 
     @Test
-    void login_shouldReturn200WithTokens_whenCredentialsAreValid() throws Exception {
-        // Arrange
-        when(authService.login(any(LoginRequest.class))).thenReturn(loginResponse);
+    void login_shouldReturn200WithOtpChallenge_whenCredentialsAreValid() throws Exception {
+        when(authService.login(any(LoginRequest.class))).thenReturn(otpChallenge);
 
-        // Act & Assert
-        // The refresh token is set as an HttpOnly cookie and stripped from the JSON body.
-        // The response must NOT include $.refreshToken.
-        // We use header() matchers for Set-Cookie because MockMvc's cookie() matcher
-        // only reads cookies set via HttpServletResponse.addCookie(), not raw Set-Cookie headers.
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OTP_REQUIRED"))
+                .andExpect(jsonPath("$.sessionToken").value("test-session-token"));
+    }
+
+    @Test
+    void login_shouldReturn400_whenEmailIsBlank() throws Exception {
+        validLoginRequest.setEmail("");
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void login_shouldReturn400_whenBodyIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── POST /api/v1/auth/verify-otp ──────────────────────────────────────────
+
+    @Test
+    void verifyOtp_shouldReturn200WithJwt_andSetCookie() throws Exception {
+        when(authService.verifyOtp("test-session-token", "123456")).thenReturn(loginResponse);
+
+        VerifyOtpRequest req = new VerifyOtpRequest();
+        req.setSessionToken("test-session-token");
+        req.setCode("123456");
+
+        mockMvc.perform(post("/api/v1/auth/verify-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access_token_value"))
                 .andExpect(jsonPath("$.refreshToken").doesNotExist())
@@ -178,22 +213,29 @@ class AuthControllerTest {
     }
 
     @Test
-    void login_shouldReturn400_whenEmailIsBlank() throws Exception {
-        // Arrange
-        validLoginRequest.setEmail("");
+    void verifyOtp_shouldReturn400_whenCodeIsNotSixDigits() throws Exception {
+        VerifyOtpRequest req = new VerifyOtpRequest();
+        req.setSessionToken("test-session-token");
+        req.setCode("abc");
 
-        // Act & Assert
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/verify-otp")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void login_shouldReturn400_whenBodyIsMissing() throws Exception {
-        // Act & Assert
-        mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+    void verifyOtp_shouldReturn401_whenOtpIsInvalid() throws Exception {
+        when(authService.verifyOtp(anyString(), anyString()))
+                .thenThrow(new BusinessException("Invalid code. 2 attempt(s) remaining.", HttpStatus.UNAUTHORIZED));
+
+        VerifyOtpRequest req = new VerifyOtpRequest();
+        req.setSessionToken("test-session-token");
+        req.setCode("000000");
+
+        mockMvc.perform(post("/api/v1/auth/verify-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isUnauthorized());
     }
 }

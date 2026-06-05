@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Account, Page, Transaction } from '@/types'
@@ -9,9 +9,19 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from '@/components/ui/dialog'
+import {
   ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight,
   Clock, CreditCard, PiggyBank, RefreshCw,
-  TrendingDown, TrendingUp,
+  TrendingDown, TrendingUp, XCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
@@ -90,9 +100,11 @@ export default function AccountDetailPage() {
   const { id }      = useParams<{ id: string }>()
   const userId      = getUserIdFromToken()
   const queryClient = useQueryClient()
+  const navigate    = useNavigate()
   const [page,         setPage]         = useState(0)
   const [txFilter,     setTxFilter]     = useState<TxFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [closeError,   setCloseError]   = useState<string | null>(null)
 
   // Reset to page 0 when filters change
   useEffect(() => setPage(0), [txFilter, statusFilter])
@@ -119,6 +131,24 @@ export default function AccountDetailPage() {
     refetchInterval: (query) => {
       const hasPending = query.state.data?.content.some(tx => tx.status === 'PENDING') ?? false
       return hasPending ? 3000 : false
+    },
+  })
+
+  const closeMutation = useMutation({
+    mutationFn: () =>
+      api.post<Account>(`/api/v1/accounts/${id}/close`, null, {
+        headers: { 'X-User-Id': userId },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts', userId] })
+      navigate('/dashboard')
+    },
+    onError: (err: any) => {
+      const msg: string =
+        err?.response?.data?.message ??
+        err?.response?.data?.error ??
+        'Une erreur est survenue lors de la clôture.'
+      setCloseError(msg)
     },
   })
 
@@ -200,16 +230,74 @@ export default function AccountDetailPage() {
                    : 'Fermé'}
                 </Badge>
                 {account.status === 'ACTIVE' && (
-                  <Link
-                    to="/transfer"
-                    className={cn(
-                      buttonVariants({ variant: 'secondary', size: 'sm' }),
-                      'mt-auto gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0',
-                    )}
-                  >
-                    <ArrowLeftRight size={13} />
-                    <span>Virer</span>
-                  </Link>
+                  <div className="mt-auto flex items-center gap-2">
+                    <Link
+                      to="/transfer"
+                      className={cn(
+                        buttonVariants({ variant: 'secondary', size: 'sm' }),
+                        'gap-1.5 bg-white/20 text-white hover:bg-white/30 border-0',
+                      )}
+                    >
+                      <ArrowLeftRight size={13} />
+                      <span>Virer</span>
+                    </Link>
+
+                    {/* ── Close account ───────────────────────────────── */}
+                    <Dialog onOpenChange={(open) => { if (!open) setCloseError(null) }}>
+                      <DialogTrigger
+                        render={
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1.5 bg-white/10 text-white hover:bg-red-500/80 border-0"
+                          />
+                        }
+                      >
+                        <XCircle size={13} />
+                        <span>Clôturer</span>
+                      </DialogTrigger>
+                      <DialogContent showCloseButton={false}>
+                        <DialogHeader>
+                          <DialogTitle>Clôturer ce compte ?</DialogTitle>
+                          <DialogDescription>
+                            Cette action est <strong className="text-foreground">irréversible</strong>.
+                            Une fois clôturé, le compte ne pourra plus être réactivé.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-2 text-sm">
+                          {account.balance !== 0 ? (
+                            <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-700 border border-amber-200">
+                              ⚠️ Votre solde est de <strong>{formatAmount(account.balance, account.currency)}</strong>.
+                              Ramenez-le à zéro avant de clôturer ce compte.
+                            </p>
+                          ) : (
+                            <p className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-700 border border-emerald-200">
+                              ✓ Solde nul — le compte peut être clôturé.
+                            </p>
+                          )}
+                          {closeError && (
+                            <p className="rounded-md bg-red-50 px-3 py-2 text-red-700 border border-red-200">
+                              {closeError}
+                            </p>
+                          )}
+                        </div>
+
+                        <DialogFooter>
+                          <DialogClose render={<Button variant="outline" />}>
+                            Annuler
+                          </DialogClose>
+                          <Button
+                            variant="destructive"
+                            disabled={account.balance !== 0 || closeMutation.isPending}
+                            onClick={() => closeMutation.mutate()}
+                          >
+                            {closeMutation.isPending ? 'Clôture en cours…' : 'Confirmer la clôture'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 )}
                 {account.status === 'PENDING_APPROVAL' && (
                   <p className="mt-auto text-[10px] text-white/60 text-right max-w-[110px] leading-tight">

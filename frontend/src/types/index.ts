@@ -22,6 +22,12 @@ export interface AuthResponse {
   role: string
 }
 
+/** Returned by POST /login — the actual JWT is issued after OTP verification. */
+export interface OtpChallengeResponse {
+  status: 'OTP_REQUIRED'
+  sessionToken: string
+}
+
 // ── Account ───────────────────────────────────────────────────────────────────
 
 export type AccountType = 'CHECKING' | 'SAVINGS'

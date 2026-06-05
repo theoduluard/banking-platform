@@ -282,6 +282,31 @@ public class AccountService {
                 .build());
     }
 
+    // ── Account closure ───────────────────────────────────────────────────────
+
+    /**
+     * Closes the authenticated user's account.
+     * Preconditions: account must be ACTIVE and have a zero balance.
+     * The closure is intentionally irreversible — a closed account cannot be
+     * reopened through the user-facing API.
+     */
+    @Transactional
+    public AccountResponse closeAccount(UUID accountId, UUID userId) {
+        Account account = accountRepository.findByAccountIdAndUserId(accountId, userId)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        if (account.getStatus() != Account.Status.ACTIVE) {
+            throw new BusinessException("Only active accounts can be closed", HttpStatus.BAD_REQUEST);
+        }
+        if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
+            throw new BusinessException("Account balance must be zero before closing", HttpStatus.BAD_REQUEST);
+        }
+
+        account.setStatus(Account.Status.CLOSED);
+        log.info("Account {} closed by user {}", accountId, userId);
+        return toResponse(accountRepository.save(account));
+    }
+
     /** Used by the IBAN-lookup endpoint — returns the raw entity to avoid over-exposure. */
     public Optional<Account> findByIban(String iban) {
         return accountRepository.findByIban(iban);

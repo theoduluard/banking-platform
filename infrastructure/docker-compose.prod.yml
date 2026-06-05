@@ -286,6 +286,17 @@ services:
     networks:
       - banking-net
 
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: zipkin
+    restart: unless-stopped
+    environment:
+      STORAGE_TYPE: mem
+    networks:
+      - banking-net
+    # Not exposed publicly — accessible only within the banking-net network.
+    # Traces are sent by services via http://zipkin:9411/api/v2/spans.
+
 # ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   postgres-auth-data:
