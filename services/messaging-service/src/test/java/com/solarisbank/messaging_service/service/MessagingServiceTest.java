@@ -1,8 +1,11 @@
 package com.solarisbank.messaging_service.service;
 
+import com.solarisbank.messaging_service.dto.AddReplyRequest;
+import com.solarisbank.messaging_service.dto.AdminReplyRequest;
 import com.solarisbank.messaging_service.dto.CreateRequestRequest;
 import com.solarisbank.messaging_service.dto.MessageResponse;
 import com.solarisbank.messaging_service.dto.SendMessageRequest;
+import com.solarisbank.messaging_service.dto.SupportRequestDetailResponse;
 import com.solarisbank.messaging_service.dto.SupportRequestResponse;
 import com.solarisbank.messaging_service.exception.BusinessException;
 import com.solarisbank.messaging_service.model.Message;
@@ -20,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -221,15 +225,75 @@ class MessagingServiceTest {
                 .hasMessageContaining("Request not found");
     }
 
+    // ── getRequestDetail ───────────────────────────────────────────────────────
+
+    @Test
+    void getRequestDetail_shouldReturnDetail_whenOwner() {
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of());
+
+        SupportRequestDetailResponse detail = messagingService.getRequestDetail(requestId, userId);
+
+        assertThat(detail.getId()).isEqualTo(requestId);
+        assertThat(detail.getStatus()).isEqualTo(SupportRequest.Status.OPEN);
+        assertThat(detail.getReplies()).isEmpty();
+    }
+
     // ── addClientReply ─────────────────────────────────────────────────────────
 
     @Test
-    void addClientReply_shouldThrow_whenRequestIsClosed() {
-        openRequest.setStatus(SupportRequest.Status.RESOLVED);
+    void addClientReply_shouldSaveReplyAndReturnDetail_whenOpen() {
+        AddReplyRequest req = new AddReplyRequest();
+        req.setBody("Voici ma réponse.");
+
+        SupportRequestReply saved = SupportRequestReply.builder()
+                .id(UUID.randomUUID()).requestId(requestId)
+                .authorType(SupportRequestReply.AuthorType.CLIENT).authorId(userId)
+                .body("Voici ma réponse.")
+                .createdAt(LocalDateTime.now()).build();
+
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.save(any(SupportRequestReply.class))).thenReturn(saved);
+        // second findById call inside addClientReply
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of(saved));
+
+        SupportRequestDetailResponse detail = messagingService.addClientReply(requestId, userId, req);
+
+        assertThat(detail.getReplies()).hasSize(1);
+        verify(replyRepository).save(argThat(r ->
+                r.getAuthorType() == SupportRequestReply.AuthorType.CLIENT
+                && "Voici ma réponse.".equals(r.getBody())));
+    }
+
+    @Test
+    void addClientReply_shouldReopenRequest_whenInProgress() {
+        openRequest.setStatus(SupportRequest.Status.IN_PROGRESS);
+        AddReplyRequest req = new AddReplyRequest();
+        req.setBody("Réponse client.");
+
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.save(any())).thenReturn(SupportRequestReply.builder()
+                .id(UUID.randomUUID()).requestId(requestId)
+                .authorType(SupportRequestReply.AuthorType.CLIENT).authorId(userId)
+                .body("Réponse client.").createdAt(LocalDateTime.now()).build());
+        when(requestRepository.save(any())).thenReturn(openRequest);
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId)).thenReturn(List.of());
+
+        messagingService.addClientReply(requestId, userId, req);
+
+        // Should set status back to OPEN
+        verify(requestRepository).save(argThat(r -> r.getStatus() == SupportRequest.Status.OPEN));
+    }
+
+    @Test
+    void addClientReply_shouldThrow_whenRequestIsRejected() {
+        openRequest.setStatus(SupportRequest.Status.REJECTED);
         when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
 
-        com.solarisbank.messaging_service.dto.AddReplyRequest req =
-                new com.solarisbank.messaging_service.dto.AddReplyRequest();
+        AddReplyRequest req = new AddReplyRequest();
         req.setBody("Toujours le même problème.");
 
         assertThatThrownBy(() -> messagingService.addClientReply(requestId, userId, req))
@@ -237,5 +301,185 @@ class MessagingServiceTest {
                 .hasMessageContaining("closed request");
 
         verify(replyRepository, never()).save(any(SupportRequestReply.class));
+    }
+
+    @Test
+    void addClientReply_shouldThrow_whenRequestIsClosed() {
+        openRequest.setStatus(SupportRequest.Status.RESOLVED);
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+
+        AddReplyRequest req = new AddReplyRequest();
+        req.setBody("Toujours le même problème.");
+
+        assertThatThrownBy(() -> messagingService.addClientReply(requestId, userId, req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("closed request");
+
+        verify(replyRepository, never()).save(any(SupportRequestReply.class));
+    }
+
+    @Test
+    void addClientReply_shouldThrowForbidden_whenNotOwner() {
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+
+        AddReplyRequest req = new AddReplyRequest();
+        req.setBody("Corps.");
+
+        assertThatThrownBy(() -> messagingService.addClientReply(requestId, UUID.randomUUID(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Forbidden");
+
+        verify(replyRepository, never()).save(any());
+    }
+
+    // ── sendSystemMessage ──────────────────────────────────────────────────────
+
+    @Test
+    void sendSystemMessage_shouldPersistMessage() {
+        when(messageRepository.save(any(Message.class))).thenReturn(savedMessage);
+
+        messagingService.sendSystemMessage(userId, "Bienvenue", "Compte approuvé.", Message.Type.APPROVAL);
+
+        verify(messageRepository).save(argThat(m ->
+                m.getUserId().equals(userId)
+                && "Bienvenue".equals(m.getSubject())
+                && m.getType() == Message.Type.APPROVAL));
+    }
+
+    // ── getAllMessages ─────────────────────────────────────────────────────────
+
+    @Test
+    void getAllMessages_shouldReturnPagedMessages() {
+        Page<Message> page = new PageImpl<>(List.of(savedMessage),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")), 1);
+        when(messageRepository.findAll(any(PageRequest.class))).thenReturn(page);
+
+        Page<MessageResponse> result = messagingService.getAllMessages(0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().getId()).isEqualTo(messageId);
+    }
+
+    // ── getAllRequests ─────────────────────────────────────────────────────────
+
+    @Test
+    void getAllRequests_shouldReturnAllRequests_whenNoStatusFilter() {
+        Page<SupportRequest> page = new PageImpl<>(List.of(openRequest));
+        when(requestRepository.findAllByOrderByCreatedAtDesc(any(PageRequest.class)))
+                .thenReturn(page);
+
+        Page<SupportRequestResponse> result = messagingService.getAllRequests(0, 20, null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().getId()).isEqualTo(requestId);
+    }
+
+    @Test
+    void getAllRequests_shouldFilterByStatus_whenStatusProvided() {
+        Page<SupportRequest> page = new PageImpl<>(List.of(openRequest));
+        when(requestRepository.findByStatusOrderByCreatedAtDesc(
+                eq(SupportRequest.Status.OPEN), any(PageRequest.class)))
+                .thenReturn(page);
+
+        Page<SupportRequestResponse> result =
+                messagingService.getAllRequests(0, 20, SupportRequest.Status.OPEN);
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(requestRepository).findByStatusOrderByCreatedAtDesc(
+                eq(SupportRequest.Status.OPEN), any());
+    }
+
+    // ── getRequestDetailAdmin ──────────────────────────────────────────────────
+
+    @Test
+    void getRequestDetailAdmin_shouldReturnDetail_whenFound() {
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of());
+
+        SupportRequestDetailResponse detail = messagingService.getRequestDetailAdmin(requestId);
+
+        assertThat(detail.getId()).isEqualTo(requestId);
+    }
+
+    @Test
+    void getRequestDetailAdmin_shouldThrowNotFound_whenRequestMissing() {
+        when(requestRepository.findById(requestId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messagingService.getRequestDetailAdmin(requestId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ── adminReply ─────────────────────────────────────────────────────────────
+
+    @Test
+    void adminReply_shouldSaveReplyAndSetInProgress_whenOpen() {
+        UUID adminId = UUID.randomUUID();
+        AdminReplyRequest req = new AdminReplyRequest();
+        req.setBody("Nous traitons votre demande.");
+
+        SupportRequestReply saved = SupportRequestReply.builder()
+                .id(UUID.randomUUID()).requestId(requestId)
+                .authorType(SupportRequestReply.AuthorType.ADMIN).authorId(adminId)
+                .body(req.getBody()).createdAt(LocalDateTime.now()).build();
+
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.save(any())).thenReturn(saved);
+        when(requestRepository.save(any())).thenReturn(openRequest);
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of(saved));
+
+        SupportRequestDetailResponse detail = messagingService.adminReply(requestId, adminId, req);
+
+        // Should auto-set IN_PROGRESS when request was OPEN
+        verify(requestRepository).save(argThat(r ->
+                r.getStatus() == SupportRequest.Status.IN_PROGRESS));
+        assertThat(detail.getReplies()).hasSize(1);
+    }
+
+    @Test
+    void adminReply_shouldUseNewStatus_whenExplicitlyProvided() {
+        UUID adminId = UUID.randomUUID();
+        AdminReplyRequest req = new AdminReplyRequest();
+        req.setBody("Résolu.");
+        req.setNewStatus(SupportRequest.Status.RESOLVED);
+
+        SupportRequestReply saved = SupportRequestReply.builder()
+                .id(UUID.randomUUID()).requestId(requestId)
+                .authorType(SupportRequestReply.AuthorType.ADMIN).authorId(adminId)
+                .body(req.getBody()).createdAt(LocalDateTime.now()).build();
+
+        when(requestRepository.findById(requestId)).thenReturn(Optional.of(openRequest));
+        when(replyRepository.save(any())).thenReturn(saved);
+        when(requestRepository.save(any())).thenReturn(openRequest);
+        when(replyRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of(saved));
+
+        messagingService.adminReply(requestId, adminId, req);
+
+        verify(requestRepository).save(argThat(r ->
+                r.getStatus() == SupportRequest.Status.RESOLVED));
+    }
+
+    @Test
+    void adminReply_shouldThrowNotFound_whenRequestMissing() {
+        when(requestRepository.findById(requestId)).thenReturn(Optional.empty());
+
+        AdminReplyRequest req = new AdminReplyRequest();
+        req.setBody("Corps.");
+
+        assertThatThrownBy(() -> messagingService.adminReply(requestId, UUID.randomUUID(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ── countOpenRequests ──────────────────────────────────────────────────────
+
+    @Test
+    void countOpenRequests_shouldReturnCount() {
+        when(requestRepository.countByStatus(SupportRequest.Status.OPEN)).thenReturn(7L);
+
+        assertThat(messagingService.countOpenRequests()).isEqualTo(7L);
     }
 }

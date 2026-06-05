@@ -2,6 +2,7 @@ package com.solarisbank.transaction_service.service;
 
 import com.solarisbank.transaction_service.client.AccountClient;
 import com.solarisbank.transaction_service.client.dto.AccountResponse;
+import com.solarisbank.transaction_service.dto.AdminOperationRequest;
 import com.solarisbank.transaction_service.dto.TransactionResponse;
 import com.solarisbank.transaction_service.dto.TransferRequest;
 import com.solarisbank.transaction_service.exception.BusinessException;
@@ -210,5 +211,75 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> transactionService.getTransaction(transactionId, UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Access denied");
+    }
+
+    // ── adminDeposit ───────────────────────────────────────────────────────────
+
+    @Test
+    void adminDeposit_shouldSaveTransactionAndCallAccountClient() {
+        UUID adminUserId = UUID.randomUUID();
+        AdminOperationRequest req = new AdminOperationRequest();
+        req.setAccountId(toAccountId);
+        req.setAmount(new BigDecimal("500.00"));
+        req.setDescription("Dépôt initial");
+
+        Transaction depositTx = Transaction.builder()
+                .id(transactionId)
+                .fromAccountId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                .toAccountId(toAccountId)
+                .initiatedByUserId(adminUserId)
+                .amount(new BigDecimal("500.00"))
+                .currency("EUR")
+                .type(Transaction.Type.DEPOSIT)
+                .status(Transaction.Status.COMPLETED)
+                .createdAt(LocalDateTime.now())
+                .completedAt(LocalDateTime.now())
+                .build();
+
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(depositTx);
+        doNothing().when(accountClient).adminDeposit(toAccountId, new BigDecimal("500.00"));
+
+        TransactionResponse response = transactionService.adminDeposit(adminUserId, req);
+
+        assertThat(response.getType()).isEqualTo(Transaction.Type.DEPOSIT);
+        assertThat(response.getStatus()).isEqualTo(Transaction.Status.COMPLETED);
+        verify(transactionRepository).save(argThat(t ->
+                t.getType() == Transaction.Type.DEPOSIT
+                && t.getToAccountId().equals(toAccountId)));
+        verify(accountClient).adminDeposit(toAccountId, new BigDecimal("500.00"));
+    }
+
+    // ── adminWithdrawal ────────────────────────────────────────────────────────
+
+    @Test
+    void adminWithdrawal_shouldSaveTransactionAndCallAccountClient() {
+        UUID adminUserId = UUID.randomUUID();
+        AdminOperationRequest req = new AdminOperationRequest();
+        req.setAccountId(fromAccountId);
+        req.setAmount(new BigDecimal("100.00"));
+
+        Transaction withdrawalTx = Transaction.builder()
+                .id(transactionId)
+                .fromAccountId(fromAccountId)
+                .toAccountId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                .initiatedByUserId(adminUserId)
+                .amount(new BigDecimal("100.00"))
+                .currency("EUR")
+                .type(Transaction.Type.WITHDRAWAL)
+                .status(Transaction.Status.COMPLETED)
+                .createdAt(LocalDateTime.now())
+                .completedAt(LocalDateTime.now())
+                .build();
+
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(withdrawalTx);
+        doNothing().when(accountClient).adminWithdrawal(fromAccountId, new BigDecimal("100.00"));
+
+        TransactionResponse response = transactionService.adminWithdrawal(adminUserId, req);
+
+        assertThat(response.getType()).isEqualTo(Transaction.Type.WITHDRAWAL);
+        verify(transactionRepository).save(argThat(t ->
+                t.getType() == Transaction.Type.WITHDRAWAL
+                && t.getFromAccountId().equals(fromAccountId)));
+        verify(accountClient).adminWithdrawal(fromAccountId, new BigDecimal("100.00"));
     }
 }

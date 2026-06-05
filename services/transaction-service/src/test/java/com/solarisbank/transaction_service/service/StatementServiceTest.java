@@ -174,6 +174,68 @@ class StatementServiceTest {
         assertThat(pdf).isNotNull().isNotEmpty();
     }
 
+    @Test
+    void generateStatement_shouldWorkWithNullCreatedAt() {
+        // Covers the `tx.getCreatedAt() != null ? ... : "-"` false branch
+        Transaction tx = Transaction.builder()
+                .id(UUID.randomUUID())
+                .fromAccountId(accountId).toAccountId(UUID.randomUUID())
+                .initiatedByUserId(userId)
+                .amount(new BigDecimal("100.00")).currency("EUR")
+                .type(Transaction.Type.TRANSFER).status(Transaction.Status.COMPLETED)
+                .createdAt(null)   // <-- null createdAt
+                .build();
+
+        when(accountClient.getAccount(accountId, userId)).thenReturn(accountResponse);
+        when(transactionRepository.findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(
+                accountId, accountId)).thenReturn(List.of(tx));
+
+        byte[] pdf = statementService.generateStatement(accountId, userId);
+        assertThat(pdf).isNotNull().isNotEmpty();
+    }
+
+    @Test
+    void generateStatement_shouldWorkWithNullTypeAndStatus() {
+        // Covers translateType(null, ...) → "-" and translateStatus(null) → "-"
+        Transaction tx = Transaction.builder()
+                .id(UUID.randomUUID())
+                .fromAccountId(accountId).toAccountId(UUID.randomUUID())
+                .initiatedByUserId(userId)
+                .amount(new BigDecimal("100.00")).currency("EUR")
+                .type(null).status(null)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(accountClient.getAccount(accountId, userId)).thenReturn(accountResponse);
+        when(transactionRepository.findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(
+                accountId, accountId)).thenReturn(List.of(tx));
+
+        byte[] pdf = statementService.generateStatement(accountId, userId);
+        assertThat(pdf).isNotNull().isNotEmpty();
+    }
+
+    @Test
+    void generateStatement_shouldTruncateLongDescription() {
+        // Covers the truncate(...) "..." path when description exceeds max length
+        String longDesc = "This is a very long description that should be truncated by the PDF generator";
+        Transaction tx = Transaction.builder()
+                .id(UUID.randomUUID())
+                .fromAccountId(accountId).toAccountId(UUID.randomUUID())
+                .initiatedByUserId(userId)
+                .amount(new BigDecimal("100.00")).currency("EUR")
+                .type(Transaction.Type.TRANSFER).status(Transaction.Status.COMPLETED)
+                .description(longDesc)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(accountClient.getAccount(accountId, userId)).thenReturn(accountResponse);
+        when(transactionRepository.findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(
+                accountId, accountId)).thenReturn(List.of(tx));
+
+        byte[] pdf = statementService.generateStatement(accountId, userId);
+        assertThat(pdf).isNotNull().isNotEmpty();
+    }
+
     // ── generateStatement — error paths ───────────────────────────────────────
 
     @Test

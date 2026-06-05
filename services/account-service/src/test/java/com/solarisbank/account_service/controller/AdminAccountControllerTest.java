@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -213,5 +214,137 @@ class AdminAccountControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ── GET /api/v1/admin/accounts ────────────────────────────────────────────
+
+    @Test
+    void getAllAccounts_shouldReturn200_whenAdmin() throws Exception {
+        Account account = Account.builder()
+                .accountId(accountId)
+                .userId(UUID.randomUUID())
+                .iban("FR7630006000011234567890189")
+                .type(Account.Type.CHECKING)
+                .balance(new BigDecimal("500.00"))
+                .currency("EUR")
+                .status(Account.Status.ACTIVE)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Page<Account> page = new PageImpl<>(List.of(account));
+        when(accountRepository.findAll(any(PageRequest.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(accountId.toString()));
+    }
+
+    @Test
+    void getAllAccounts_shouldReturn403_whenNotAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "CLIENT"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(accountService);
+        verify(accountRepository, never()).findAll(any(PageRequest.class));
+    }
+
+    // ── GET /api/v1/admin/accounts/{id}/documents ─────────────────────────────
+
+    @Test
+    void getDocuments_shouldReturn200_whenAdmin() throws Exception {
+        com.solarisbank.account_service.dto.VerificationDocumentResponse docResponse =
+                com.solarisbank.account_service.dto.VerificationDocumentResponse.builder()
+                        .id(UUID.randomUUID())
+                        .accountId(accountId)
+                        .userId(UUID.randomUUID())
+                        .selfieBase64("base64selfie")
+                        .selfieContentType("image/jpeg")
+                        .idCardBase64("base64id")
+                        .idCardContentType("image/jpeg")
+                        .submittedAt(java.time.LocalDateTime.now())
+                        .build();
+
+        when(accountService.getAccountDocuments(accountId)).thenReturn(docResponse);
+
+        mockMvc.perform(get("/api/v1/admin/accounts/{id}/documents", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value(accountId.toString()));
+    }
+
+    @Test
+    void getDocuments_shouldReturn403_whenNotAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/accounts/{id}/documents", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "CLIENT"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(accountService);
+    }
+
+    @Test
+    void getDocuments_shouldReturn404_whenNotFound() throws Exception {
+        when(accountService.getAccountDocuments(accountId))
+                .thenThrow(new BusinessException("Documents not found", HttpStatus.NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/admin/accounts/{id}/documents", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── PATCH /api/v1/admin/accounts/{id}/status ──────────────────────────────
+
+    @Test
+    void updateAccountStatus_shouldReturn200_whenAdmin() throws Exception {
+        Account account = Account.builder()
+                .accountId(accountId)
+                .userId(UUID.randomUUID())
+                .iban("FR7630006000011234567890189")
+                .type(Account.Type.CHECKING)
+                .balance(new BigDecimal("500.00"))
+                .currency("EUR")
+                .status(Account.Status.BLOCKED)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        when(accountRepository.save(any(Account.class))).thenReturn(account);
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/status", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "ADMIN")
+                        .param("status", "BLOCKED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
+    }
+
+    @Test
+    void updateAccountStatus_shouldReturn403_whenNotAdmin() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/status", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "CLIENT")
+                        .param("status", "BLOCKED"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(accountService);
+        verify(accountRepository, never()).findById(any());
+    }
+
+    @Test
+    void updateAccountStatus_shouldReturn404_whenAccountNotFound() throws Exception {
+        when(accountRepository.findById(accountId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(patch("/api/v1/admin/accounts/{id}/status", accountId)
+                        .header("X-User-Id", adminUserId.toString())
+                        .header("X-User-Role", "ADMIN")
+                        .param("status", "BLOCKED"))
+                .andExpect(status().isNotFound());
     }
 }

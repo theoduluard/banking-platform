@@ -206,6 +206,133 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("Only active accounts can be closed"));
     }
 
+    // ── GET /api/v1/accounts/iban/{iban} ──────────────────────────────────────
+
+    @Test
+    void getByIban_shouldReturn200_withAccountId_whenFound() throws Exception {
+        com.solarisbank.account_service.model.Account account =
+                com.solarisbank.account_service.model.Account.builder()
+                        .accountId(accountId)
+                        .userId(userId)
+                        .iban("FR7630006000010000000000197")
+                        .type(com.solarisbank.account_service.model.Account.Type.CHECKING)
+                        .balance(java.math.BigDecimal.ZERO)
+                        .currency("EUR")
+                        .status(com.solarisbank.account_service.model.Account.Status.ACTIVE)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+
+        when(accountService.findByIban("FR7630006000010000000000197"))
+                .thenReturn(java.util.Optional.of(account));
+
+        mockMvc.perform(get("/api/v1/accounts/iban/{iban}", "FR7630006000010000000000197")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value(accountId.toString()));
+    }
+
+    @Test
+    void getByIban_shouldReturn404_whenNotFound() throws Exception {
+        when(accountService.findByIban("FR0000000000000000000000000"))
+                .thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/v1/accounts/iban/{iban}", "FR0000000000000000000000000")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── POST /api/v1/accounts/kyc ──────────────────────────────────────────────
+
+    @Test
+    void submitKyc_shouldReturn204_whenSuccessful() throws Exception {
+        doNothing().when(accountService).submitKyc(eq(userId), any());
+
+        mockMvc.perform(post("/api/v1/accounts/kyc")
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "selfieBase64", "data",
+                                "selfieContentType", "image/jpeg",
+                                "idCardBase64", "data",
+                                "idCardContentType", "image/jpeg"))))
+                .andExpect(status().isNoContent());
+
+        verify(accountService).submitKyc(eq(userId), any());
+    }
+
+    @Test
+    void submitKyc_shouldReturn400_whenFieldsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/accounts/kyc")
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(accountService);
+    }
+
+    // ── GET /api/v1/accounts/kyc/status ───────────────────────────────────────
+
+    @Test
+    void getKycStatus_shouldReturn200_withSubmittedTrue() throws Exception {
+        when(accountService.hasKyc(userId)).thenReturn(true);
+
+        mockMvc.perform(get("/api/v1/accounts/kyc/status")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.submitted").value(true));
+    }
+
+    @Test
+    void getKycStatus_shouldReturn200_withSubmittedFalse() throws Exception {
+        when(accountService.hasKyc(userId)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/accounts/kyc/status")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.submitted").value(false));
+    }
+
+    // ── POST /api/v1/accounts/{id}/credit — unauthorized ─────────────────────
+
+    @Test
+    void credit_shouldReturn401_whenInternalSecretInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/accounts/{id}/credit", accountId)
+                        .header("X-Internal-Secret", "wrong-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("amount", "50.00"))))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(accountService);
+    }
+
+    @Test
+    void credit_shouldReturn401_whenXUserIdIsNotAValidUUID() throws Exception {
+        // Sends a non-blank, non-UUID X-User-Id with no internal secret
+        // → isValidUUID("not-a-uuid") throws IllegalArgumentException → caught → returns false → 401
+        mockMvc.perform(post("/api/v1/accounts/{id}/credit", accountId)
+                        .header("X-User-Id", "not-a-uuid")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("amount", "50.00"))))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(accountService);
+    }
+
+    @Test
+    void credit_shouldReturn401_whenFilterPassesButSecretIsWrong() throws Exception {
+        // Filter lets the request through (valid X-User-Id present) but controller's
+        // own double-check rejects the wrong internal secret.
+        mockMvc.perform(post("/api/v1/accounts/{id}/credit", accountId)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Internal-Secret", "wrong-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("amount", "50.00"))))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(accountService);
+    }
+
     // ── GlobalExceptionHandler — 500 générique ────────────────────────────────
 
     @Test

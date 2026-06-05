@@ -1,5 +1,6 @@
 package com.solarisbank.transaction_service.kafka.producer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -18,8 +19,11 @@ import org.springframework.kafka.core.KafkaTemplate;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,5 +107,19 @@ class SagaEventProducerTest {
                 eq(KafkaTopicConfig.TOPIC_CREDIT_REQUESTED),
                 eq(transactionId.toString()),
                 startsWith("{"));
+    }
+
+    // ── Serialization failure ──────────────────────────────────────────────────
+
+    @Test
+    void publishDebitRequest_shouldThrowRuntimeException_whenSerializationFails() throws Exception {
+        doThrow(new JsonProcessingException("serialize error") {})
+                .when(objectMapper).writeValueAsString(any());
+
+        DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
+
+        assertThatThrownBy(() -> producer.publishDebitRequest(event))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Kafka serialization error");
     }
 }

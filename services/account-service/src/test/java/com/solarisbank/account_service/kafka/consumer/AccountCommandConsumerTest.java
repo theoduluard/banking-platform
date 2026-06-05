@@ -15,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -134,5 +135,80 @@ class AccountCommandConsumerTest {
         consumer.onCreditRequested("not-json");
 
         verifyNoInteractions(accountService, accountEventProducer);
+    }
+
+    // ── DataIntegrityViolationException — DEBIT ────────────────────────────────
+
+    @Test
+    void onDebitRequested_shouldPublishSuccess_whenConcurrentDuplicateDebit() throws Exception {
+        // A concurrent consumer already processed this event → unique constraint fires,
+        // but processedEventRepository confirms it was already handled.
+        DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
+        String payload = objectMapper.writeValueAsString(event);
+
+        doThrow(new DataIntegrityViolationException("duplicate key"))
+                .when(accountService).debitFromSaga(transactionId, accountId, userId, amount);
+        when(processedEventRepository.existsByTransactionIdAndEventType(transactionId, "DEBIT"))
+                .thenReturn(true);
+
+        consumer.onDebitRequested(payload);
+
+        verify(accountEventProducer).publishDebitResult(argThat(r ->
+                r.getTransactionId().equals(transactionId) && r.isSuccess()));
+    }
+
+    @Test
+    void onDebitRequested_shouldPublishFailure_whenGenuineConstraintViolationDebit() throws Exception {
+        // The constraint fired but no processed-event marker exists → genuine error.
+        DebitRequestedEvent event = new DebitRequestedEvent(transactionId, accountId, userId, amount);
+        String payload = objectMapper.writeValueAsString(event);
+
+        doThrow(new DataIntegrityViolationException("unexpected constraint"))
+                .when(accountService).debitFromSaga(transactionId, accountId, userId, amount);
+        when(processedEventRepository.existsByTransactionIdAndEventType(transactionId, "DEBIT"))
+                .thenReturn(false);
+
+        consumer.onDebitRequested(payload);
+
+        verify(accountEventProducer).publishDebitResult(argThat(r ->
+                r.getTransactionId().equals(transactionId) && !r.isSuccess()));
+    }
+
+    // ── DataIntegrityViolationException — CREDIT ───────────────────────────────
+
+    @Test
+    void onCreditRequested_shouldPublishSuccess_whenConcurrentDuplicateCredit() throws Exception {
+        UUID toAccountId   = UUID.randomUUID();
+        UUID fromAccountId = UUID.randomUUID();
+        CreditRequestedEvent event = new CreditRequestedEvent(transactionId, toAccountId, fromAccountId, amount);
+        String payload = objectMapper.writeValueAsString(event);
+
+        doThrow(new DataIntegrityViolationException("duplicate key"))
+                .when(accountService).creditFromSaga(transactionId, toAccountId, amount);
+        when(processedEventRepository.existsByTransactionIdAndEventType(transactionId, "CREDIT"))
+                .thenReturn(true);
+
+        consumer.onCreditRequested(payload);
+
+        verify(accountEventProducer).publishCreditResult(argThat(r ->
+                r.getTransactionId().equals(transactionId) && r.isSuccess()));
+    }
+
+    @Test
+    void onCreditRequested_shouldPublishFailure_whenGenuineConstraintViolationCredit() throws Exception {
+        UUID toAccountId   = UUID.randomUUID();
+        UUID fromAccountId = UUID.randomUUID();
+        CreditRequestedEvent event = new CreditRequestedEvent(transactionId, toAccountId, fromAccountId, amount);
+        String payload = objectMapper.writeValueAsString(event);
+
+        doThrow(new DataIntegrityViolationException("unexpected constraint"))
+                .when(accountService).creditFromSaga(transactionId, toAccountId, amount);
+        when(processedEventRepository.existsByTransactionIdAndEventType(transactionId, "CREDIT"))
+                .thenReturn(false);
+
+        consumer.onCreditRequested(payload);
+
+        verify(accountEventProducer).publishCreditResult(argThat(r ->
+                r.getTransactionId().equals(transactionId) && !r.isSuccess()));
     }
 }

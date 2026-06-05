@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.text.NumberFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -264,9 +263,9 @@ public class StatementService {
 
     private String formatAmount(BigDecimal amount, String currency) {
         if (amount == null) return "-";
-        NumberFormat nf = NumberFormat.getCurrencyInstance(Locale.FRANCE);
-        nf.setCurrency(java.util.Currency.getInstance(currency));
-        return nf.format(amount);
+        // Use US locale to avoid NNBSP (U+202F) and NBSP (U+00A0) produced by Locale.FRANCE,
+        // which are not encodable in Helvetica's WinAnsiEncoding.
+        return String.format(Locale.US, "%.2f %s", amount, currency);
     }
 
     private String translateType(Transaction.Type type, boolean isDebit) {
@@ -290,6 +289,7 @@ public class StatementService {
     }
 
     private String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+        // Use ASCII "..." — U+2026 (horizontal ellipsis) is not in WinAnsiEncoding
+        return s.length() <= max ? s : s.substring(0, max - 1) + "...";
     }
 }

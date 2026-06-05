@@ -180,4 +180,110 @@ class AccountResultConsumerTest {
         verify(transactionRepository).save(argThat(t ->
                 t.getStatus() == Transaction.Status.FAILED));
     }
+
+    // ── Poison-pill / invalid JSON ─────────────────────────────────────────────
+
+    @Test
+    void onDebitResult_shouldSkipSilently_whenPayloadIsInvalidJson() {
+        // Must not propagate — just log and return
+        consumer.onDebitResult("{ not valid json }");
+
+        verifyNoInteractions(transactionRepository, sagaEventProducer, accountClient);
+    }
+
+    @Test
+    void onCreditResult_shouldSkipSilently_whenPayloadIsInvalidJson() {
+        consumer.onCreditResult("{ not valid json }");
+
+        verifyNoInteractions(transactionRepository, accountClient);
+    }
+
+    // ── Idempotency guards ─────────────────────────────────────────────────────
+
+    @Test
+    void onDebitResult_shouldSkip_whenTransactionStatusIsNotPending() throws Exception {
+        // Redelivered DebitResult: transaction already advanced past PENDING
+        Transaction completedTx = Transaction.builder()
+                .id(transactionId)
+                .fromAccountId(UUID.randomUUID())
+                .toAccountId(UUID.randomUUID())
+                .initiatedByUserId(UUID.randomUUID())
+                .amount(new BigDecimal("150.00"))
+                .currency("EUR")
+                .type(Transaction.Type.TRANSFER)
+                .status(Transaction.Status.COMPLETED)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        String payload = objectMapper.writeValueAsString(
+                new DebitResultEvent(transactionId, true, null));
+
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(completedTx));
+
+        consumer.onDebitResult(payload);
+
+        // Idempotency guard must prevent any state change or Kafka publish
+        verify(transactionRepository, never()).save(any());
+        verifyNoInteractions(sagaEventProducer);
+    }
+
+    @Test
+    void onCreditResult_shouldSkip_whenTransactionNotFound() throws Exception {
+        String payload = objectMapper.writeValueAsString(
+                new CreditResultEvent(transactionId, true, null));
+
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.empty());
+
+        consumer.onCreditResult(payload);
+
+        verify(transactionRepository, never()).save(any());
+        verifyNoInteractions(accountClient);
+    }
+
+    @Test
+    void onCreditResult_shouldSkip_whenTransactionStatusIsNotDebitConfirmed() throws Exception {
+        // Redelivered CreditResult: transaction is already COMPLETED
+        Transaction completedTx = Transaction.builder()
+                .id(transactionId)
+                .fromAccountId(UUID.randomUUID())
+                .toAccountId(UUID.randomUUID())
+                .initiatedByUserId(UUID.randomUUID())
+                .amount(new BigDecimal("150.00"))
+                .currency("EUR")
+                .type(Transaction.Type.TRANSFER)
+                .status(Transaction.Status.COMPLETED)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        String payload = objectMapper.writeValueAsString(
+                new CreditResultEvent(transactionId, true, null));
+
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(completedTx));
+
+        consumer.onCreditResult(payload);
+
+        verify(transactionRepository, never()).save(any());
+        verifyNoInteractions(accountClient);
+    }
+
+    // ── Compensation failure ───────────────────────────────────────────────────
+
+    @Test
+    void onCreditResult_shouldLogCriticalError_whenCompensationFails() throws Exception {
+        // Credit FAILED → compensation REST call also throws; must not propagate
+        String payload = objectMapper.writeValueAsString(
+                new CreditResultEvent(transactionId, false, "Account blocked"));
+
+        when(transactionRepository.findById(transactionId))
+                .thenReturn(Optional.of(debitConfirmedTransaction));
+        doThrow(new RuntimeException("account-service unavailable"))
+                .when(accountClient).credit(any(), any());
+
+        // Must not throw — error is swallowed and logged as CRITICAL
+        consumer.onCreditResult(payload);
+
+        // Transaction is still marked FAILED despite the compensation error
+        verify(transactionRepository).save(argThat(t ->
+                t.getStatus() == Transaction.Status.FAILED));
+    }
 }

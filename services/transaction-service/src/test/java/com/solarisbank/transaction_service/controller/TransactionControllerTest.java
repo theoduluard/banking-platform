@@ -195,4 +195,35 @@ class TransactionControllerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500));
     }
+
+    // ── InternalRequestFilter — 401 path ──────────────────────────────────────
+
+    @Test
+    void transfer_shouldReturn401_whenNoAuthHeaderProvided() throws Exception {
+        TransferRequest request = new TransferRequest();
+        request.setFromAccountId(fromAccountId);
+        request.setToAccountId(toAccountId);
+        request.setAmount(new BigDecimal("100.00"));
+
+        // Neither X-User-Id nor X-Internal-Secret → filter returns 401
+        mockMvc.perform(post("/api/v1/transactions/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void transfer_shouldReturn401_whenXUserIdIsNotValidUUID() throws Exception {
+        TransferRequest request = new TransferRequest();
+        request.setFromAccountId(fromAccountId);
+        request.setToAccountId(toAccountId);
+        request.setAmount(new BigDecimal("100.00"));
+
+        // Non-UUID X-User-Id value without a valid internal secret
+        mockMvc.perform(post("/api/v1/transactions/transfer")
+                        .header("X-User-Id", "not-a-uuid")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
 }

@@ -1,9 +1,12 @@
 package com.solarisbank.account_service.kafka.producer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.account_service.kafka.config.KafkaTopicConfig;
+import com.solarisbank.account_service.kafka.event.AccountApprovedEvent;
+import com.solarisbank.account_service.kafka.event.AccountRejectedEvent;
 import com.solarisbank.account_service.kafka.event.CreditResultEvent;
 import com.solarisbank.account_service.kafka.event.DebitResultEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,8 +20,11 @@ import org.springframework.kafka.core.KafkaTemplate;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,5 +112,56 @@ class AccountEventProducerTest {
                 eq(KafkaTopicConfig.TOPIC_CREDIT_RESULT),
                 eq(transactionId.toString()),
                 startsWith("{"));
+    }
+
+    // ── publishAccountApproved ─────────────────────────────────────────────────
+
+    @Test
+    void publishAccountApproved_shouldSendToCorrectTopic() {
+        UUID accountId = UUID.randomUUID();
+        UUID userId    = UUID.randomUUID();
+        AccountApprovedEvent event = new AccountApprovedEvent(
+                accountId, userId, "FR7630006000011234567890189", "CHECKING");
+
+        producer.publishAccountApproved(event);
+
+        verify(kafkaTemplate).send(
+                eq(KafkaTopicConfig.TOPIC_ACCOUNT_APPROVED),
+                eq(accountId.toString()),
+                startsWith("{"));
+    }
+
+    // ── publishAccountRejected ─────────────────────────────────────────────────
+
+    @Test
+    void publishAccountRejected_shouldSendToCorrectTopic() {
+        UUID accountId = UUID.randomUUID();
+        UUID userId    = UUID.randomUUID();
+        AccountRejectedEvent event = new AccountRejectedEvent(
+                accountId, userId, "FR7630006000011234567890189", "SAVINGS");
+
+        producer.publishAccountRejected(event);
+
+        verify(kafkaTemplate).send(
+                eq(KafkaTopicConfig.TOPIC_ACCOUNT_REJECTED),
+                eq(accountId.toString()),
+                startsWith("{"));
+    }
+
+    // ── Serialization failure ──────────────────────────────────────────────────
+
+    @Test
+    void publishDebitResult_shouldThrowRuntimeException_whenSerializationFails() throws Exception {
+        doThrow(new JsonProcessingException("serialize error") {})
+                .when(objectMapper).writeValueAsString(any());
+
+        DebitResultEvent event = DebitResultEvent.builder()
+                .transactionId(transactionId)
+                .success(true)
+                .build();
+
+        assertThatThrownBy(() -> producer.publishDebitResult(event))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Kafka serialization error");
     }
 }
