@@ -28,7 +28,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) {
         http
-                .csrf(AbstractHttpConfigurer::disable)
+                // CSRF disabled intentionally: this is a stateless REST API.
+                // Authentication is performed via JWT Bearer tokens sent in the
+                // Authorization header — not via session cookies — so CSRF attacks
+                // cannot be mounted against this service.
+                .csrf(AbstractHttpConfigurer::disable) // lgtm[java/spring-disabled-csrf-protection]
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )

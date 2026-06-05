@@ -14,6 +14,8 @@ jobs:
   auth-service:
     name: auth-service
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -67,6 +69,8 @@ jobs:
   account-service:
     name: account-service
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -120,6 +124,8 @@ jobs:
   transaction-service:
     name: transaction-service
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -191,6 +197,8 @@ jobs:
   messaging-service:
     name: messaging-service
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -262,6 +270,8 @@ jobs:
   api-gateway:
     name: api-gateway
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -300,6 +310,8 @@ jobs:
   frontend:
     name: frontend
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -364,6 +376,12 @@ jobs:
           name: api-gateway-coverage
           path: .github/coverage/api-gateway
 
+      - name: Download messaging-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: messaging-service-coverage
+          path: .github/coverage/messaging-service
+
       # ── Generate SVG badges ──────────────────────────────────
       - name: Badge — auth-service
         uses: cicirello/jacoco-badge-generator@v2
@@ -397,6 +415,14 @@ jobs:
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
 
+      - name: Badge — messaging-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/messaging-service/jacoco.csv
+          badges-directory: .github/badges/messaging-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
       # ── Commit badges ────────────────────────────────────────
       - name: Commit and push badges
         run: |
@@ -416,6 +442,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ auth-service, account-service, transaction-service, api-gateway, frontend ]
     if: always()
+    permissions: {}
 
     steps:
       - name: Check results
