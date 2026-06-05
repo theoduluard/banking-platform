@@ -242,6 +242,13 @@ jobs:
           INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
         run: ./mvnw verify
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: messaging-service-coverage
+          path: services/messaging-service/target/site/jacoco/jacoco.csv
+          retention-days: 1
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
