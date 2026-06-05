@@ -11,6 +11,7 @@ import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.security.JwtAuthFilter;
 import com.solarisbank.auth_service.service.AuthService;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,15 +20,19 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Map;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -237,5 +242,226 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ── POST /api/v1/auth/resend-otp ──────────────────────────────────────────
+
+    @Test
+    void resendOtp_shouldReturn200_whenSessionTokenIsProvided() throws Exception {
+        doNothing().when(authService).resendOtp("test-session-token");
+
+        mockMvc.perform(post("/api/v1/auth/resend-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sessionToken", "test-session-token"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("A new code has been sent to your email."));
+    }
+
+    @Test
+    void resendOtp_shouldReturn400_whenSessionTokenIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/resend-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendOtp_shouldReturn401_whenSessionIsInvalid() throws Exception {
+        doThrow(new BusinessException("Invalid or expired OTP session", HttpStatus.UNAUTHORIZED))
+                .when(authService).resendOtp("expired-session");
+
+        mockMvc.perform(post("/api/v1/auth/resend-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sessionToken", "expired-session"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ── POST /api/v1/auth/refresh ─────────────────────────────────────────────
+
+    @Test
+    void refresh_shouldReturn200WithNewToken_andSetCookie() throws Exception {
+        when(authService.refresh("raw-refresh-token")).thenReturn(loginResponse);
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new Cookie("refreshToken", "raw-refresh-token")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access_token_value"))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(header().string(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        containsString("refreshToken")));
+    }
+
+    @Test
+    void refresh_shouldReturn401_whenNoCookie() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ── POST /api/v1/auth/logout ──────────────────────────────────────────────
+
+    @Test
+    void logout_shouldReturn204_andExpireCookie() throws Exception {
+        doNothing().when(authService).logout("raw-refresh-token");
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refreshToken", "raw-refresh-token")))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        containsString("refreshToken")))
+                .andExpect(header().string(org.springframework.http.HttpHeaders.SET_COOKIE,
+                        containsString("Max-Age=0")));
+    }
+
+    @Test
+    void logout_shouldReturn204_evenWithoutCookie() throws Exception {
+        doNothing().when(authService).logout(null);
+
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isNoContent());
+    }
+
+    // ── GET /api/v1/auth/verify-email ─────────────────────────────────────────
+
+    @Test
+    void verifyEmail_shouldReturn200_whenTokenIsValid() throws Exception {
+        doNothing().when(authService).verifyEmail("valid-tok");
+
+        mockMvc.perform(get("/api/v1/auth/verify-email")
+                        .param("token", "valid-tok"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Email verified successfully. You can now log in."));
+    }
+
+    @Test
+    void verifyEmail_shouldReturn404_whenTokenIsInvalid() throws Exception {
+        doThrow(new BusinessException("Invalid or expired verification token.", HttpStatus.NOT_FOUND))
+                .when(authService).verifyEmail("bad-tok");
+
+        mockMvc.perform(get("/api/v1/auth/verify-email")
+                        .param("token", "bad-tok"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void verifyEmail_shouldReturn410_whenTokenIsExpired() throws Exception {
+        doThrow(new BusinessException("Verification token has expired.", HttpStatus.GONE))
+                .when(authService).verifyEmail("expired-tok");
+
+        mockMvc.perform(get("/api/v1/auth/verify-email")
+                        .param("token", "expired-tok"))
+                .andExpect(status().isGone());
+    }
+
+    // ── POST /api/v1/auth/resend-verification ─────────────────────────────────
+
+    @Test
+    void resendVerification_shouldReturn200_whenEmailIsProvided() throws Exception {
+        doNothing().when(authService).resendVerification("user@example.com");
+
+        mockMvc.perform(post("/api/v1/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Verification email sent."));
+    }
+
+    @Test
+    void resendVerification_shouldReturn400_whenEmailIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"not-an-email\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── POST /api/v1/auth/forgot-password ─────────────────────────────────────
+
+    @Test
+    void forgotPassword_shouldReturn200_always() throws Exception {
+        doNothing().when(authService).requestPasswordReset("user@example.com");
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(
+                        "If this email is registered, a reset link has been sent."));
+    }
+
+    // ── POST /api/v1/auth/reset-password ──────────────────────────────────────
+
+    @Test
+    void resetPassword_shouldReturn200_whenRequestIsValid() throws Exception {
+        doNothing().when(authService).resetPassword(anyString(), anyString());
+
+        String body = objectMapper.writeValueAsString(
+                Map.of("token", "reset-tok", "password", "NewPass@99"));
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password reset successfully."));
+    }
+
+    @Test
+    void resetPassword_shouldReturn404_whenTokenIsInvalid() throws Exception {
+        doThrow(new BusinessException("Invalid or already used reset token.", HttpStatus.NOT_FOUND))
+                .when(authService).resetPassword(anyString(), anyString());
+
+        String body = objectMapper.writeValueAsString(
+                Map.of("token", "bad-tok", "password", "NewPass@99"));
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── GlobalExceptionHandler ────────────────────────────────────────────────
+
+    @Test
+    void handler_shouldReturn400_whenBodyIsMissing() throws Exception {
+        // POST with no body triggers HttpMessageNotReadableException
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Malformed or missing request body"));
+    }
+
+    @Test
+    void handler_shouldReturn401WithCompteDesactive_whenDisabledException() throws Exception {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new DisabledException("Account disabled"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Compte désactivé"));
+    }
+
+    @Test
+    void handler_shouldReturn401WithIdentifiantsIncorrects_whenBadCredentials() throws Exception {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new BadCredentialsException("Wrong credentials"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Identifiants incorrects"));
+    }
+
+    @Test
+    void handler_shouldReturn500_whenUnexpectedExceptionOccurs() throws Exception {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new RuntimeException("Unexpected error"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.error").value("An unexpected error occurred"));
     }
 }

@@ -10,6 +10,8 @@ public class AccountResponse {
     private UUID id;
     private String iban;
     private BigDecimal balance;
+    private String currency;
     private String status;
+    private String type;      // CHECKING | SAVINGS
     private UUID userId;
 }

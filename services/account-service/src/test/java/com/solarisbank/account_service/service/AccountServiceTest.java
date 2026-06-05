@@ -2,16 +2,25 @@ package com.solarisbank.account_service.service;
 
 import com.solarisbank.account_service.dto.AccountResponse;
 import com.solarisbank.account_service.dto.CreateAccountRequest;
+import com.solarisbank.account_service.dto.VerificationDocumentRequest;
+import com.solarisbank.account_service.dto.VerificationDocumentResponse;
 import com.solarisbank.account_service.exception.BusinessException;
+import com.solarisbank.account_service.kafka.producer.AccountEventProducer;
 import com.solarisbank.account_service.model.Account;
+import com.solarisbank.account_service.model.ProcessedSagaEvent;
+import com.solarisbank.account_service.model.VerificationDocument;
 import com.solarisbank.account_service.repository.AccountRepository;
+import com.solarisbank.account_service.repository.ProcessedSagaEventRepository;
+import com.solarisbank.account_service.repository.VerificationDocumentRepository;
 import com.solarisbank.account_service.util.IbanGenerator;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,11 +37,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
 
-    @Mock
-    private AccountRepository accountRepository;
-
-    @Mock
-    private IbanGenerator ibanGenerator;
+    @Mock private AccountRepository            accountRepository;
+    @Mock private VerificationDocumentRepository documentRepository;
+    @Mock private IbanGenerator                ibanGenerator;
+    @Mock private AccountEventProducer         eventProducer;
+    @Mock private ProcessedSagaEventRepository processedEventRepository;
 
     @InjectMocks
     private AccountService accountService;
@@ -246,6 +255,14 @@ class AccountServiceTest {
                 .hasMessageContaining("not active");
     }
 
+    @AfterEach
+    void tearDown() {
+        // Clean up TX synchronization if a test activated it manually
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
     // ── closeAccount ───────────────────────────────────────────────────────────
 
     @Test
@@ -299,5 +316,347 @@ class AccountServiceTest {
         assertThatThrownBy(() -> accountService.closeAccount(accountId, userId))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("balance must be zero");
+    }
+
+    // ── approveAccount ─────────────────────────────────────────────────────────
+
+    @Test
+    void approveAccount_shouldActivateAccount_whenPending() {
+        TransactionSynchronizationManager.initSynchronization();
+
+        Account pending = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.PENDING_APPROVAL)
+                .createdAt(LocalDateTime.now()).build();
+        Account approved = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.ACTIVE)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(pending));
+        when(accountRepository.save(any())).thenReturn(approved);
+
+        AccountResponse response = accountService.approveAccount(accountId);
+
+        assertThat(response.getStatus()).isEqualTo(Account.Status.ACTIVE);
+        verify(accountRepository).save(argThat(a -> a.getStatus() == Account.Status.ACTIVE));
+    }
+
+    @Test
+    void approveAccount_shouldThrowNotFound_whenAccountMissing() {
+        when(accountRepository.findById(accountId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.approveAccount(accountId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account not found");
+    }
+
+    @Test
+    void approveAccount_shouldThrowBadRequest_whenNotPending() {
+        // activeAccount has Status.ACTIVE — not PENDING_APPROVAL
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.approveAccount(accountId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not pending approval");
+
+        verify(accountRepository, never()).save(any());
+    }
+
+    // ── rejectAccount ──────────────────────────────────────────────────────────
+
+    @Test
+    void rejectAccount_shouldRejectAccount_whenPending() {
+        TransactionSynchronizationManager.initSynchronization();
+
+        Account pending = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.PENDING_APPROVAL)
+                .createdAt(LocalDateTime.now()).build();
+        Account rejected = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.REJECTED)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(pending));
+        when(accountRepository.save(any())).thenReturn(rejected);
+
+        AccountResponse response = accountService.rejectAccount(accountId);
+
+        assertThat(response.getStatus()).isEqualTo(Account.Status.REJECTED);
+        verify(accountRepository).save(argThat(a -> a.getStatus() == Account.Status.REJECTED));
+    }
+
+    @Test
+    void rejectAccount_shouldThrowBadRequest_whenNotPending() {
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.rejectAccount(accountId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not pending approval");
+    }
+
+    // ── submitKyc ──────────────────────────────────────────────────────────────
+
+    @Test
+    void submitKyc_shouldSaveDocument_andDeleteExistingOne() {
+        VerificationDocument existing = VerificationDocument.builder()
+                .id(UUID.randomUUID()).userId(userId)
+                .selfieBase64("old").selfieContentType("image/jpeg")
+                .idCardBase64("old").idCardContentType("image/jpeg")
+                .build();
+
+        when(documentRepository.findByUserId(userId)).thenReturn(Optional.of(existing));
+
+        VerificationDocumentRequest req = new VerificationDocumentRequest();
+        req.setSelfieBase64("selfieData");
+        req.setSelfieContentType("image/jpeg");
+        req.setIdCardBase64("idData");
+        req.setIdCardContentType("image/jpeg");
+
+        accountService.submitKyc(userId, req);
+
+        verify(documentRepository).delete(existing);
+        verify(documentRepository).save(argThat(d ->
+                d.getUserId().equals(userId)
+                && "selfieData".equals(d.getSelfieBase64())
+                && "idData".equals(d.getIdCardBase64())));
+    }
+
+    @Test
+    void submitKyc_shouldSaveDocument_whenNoExistingKyc() {
+        when(documentRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        VerificationDocumentRequest req = new VerificationDocumentRequest();
+        req.setSelfieBase64("selfieData");
+        req.setSelfieContentType("image/jpeg");
+        req.setIdCardBase64("idData");
+        req.setIdCardContentType("image/jpeg");
+
+        accountService.submitKyc(userId, req);
+
+        verify(documentRepository, never()).delete(any());
+        verify(documentRepository).save(any(VerificationDocument.class));
+    }
+
+    // ── hasKyc ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void hasKyc_shouldReturnTrue_whenDocumentExists() {
+        when(documentRepository.existsByUserId(userId)).thenReturn(true);
+
+        assertThat(accountService.hasKyc(userId)).isTrue();
+    }
+
+    @Test
+    void hasKyc_shouldReturnFalse_whenNoDocument() {
+        when(documentRepository.existsByUserId(userId)).thenReturn(false);
+
+        assertThat(accountService.hasKyc(userId)).isFalse();
+    }
+
+    // ── getPendingAccounts ─────────────────────────────────────────────────────
+
+    @Test
+    void getPendingAccounts_shouldReturnPendingList() {
+        Account pending = Account.builder()
+                .accountId(accountId).userId(userId).iban(IBAN)
+                .type(Account.Type.CHECKING).balance(BigDecimal.ZERO)
+                .currency("EUR").status(Account.Status.PENDING_APPROVAL)
+                .createdAt(LocalDateTime.now()).build();
+
+        when(accountRepository.findByStatus(Account.Status.PENDING_APPROVAL))
+                .thenReturn(List.of(pending));
+
+        List<AccountResponse> result = accountService.getPendingAccounts();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getStatus()).isEqualTo(Account.Status.PENDING_APPROVAL);
+    }
+
+    // ── getAccountDocuments ────────────────────────────────────────────────────
+
+    @Test
+    void getAccountDocuments_shouldReturnDocument_whenFound() {
+        UUID docId = UUID.randomUUID();
+        VerificationDocument doc = VerificationDocument.builder()
+                .id(docId).accountId(null).userId(userId)
+                .selfieBase64("s").selfieContentType("image/jpeg")
+                .idCardBase64("d").idCardContentType("image/jpeg")
+                .build();
+
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(documentRepository.findByUserId(userId)).thenReturn(Optional.of(doc));
+
+        VerificationDocumentResponse response = accountService.getAccountDocuments(accountId);
+
+        assertThat(response.getId()).isEqualTo(docId);
+        assertThat(response.getSelfieBase64()).isEqualTo("s");
+    }
+
+    @Test
+    void getAccountDocuments_shouldThrowNotFound_whenAccountMissing() {
+        when(accountRepository.findById(accountId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.getAccountDocuments(accountId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account not found");
+    }
+
+    @Test
+    void getAccountDocuments_shouldThrowNotFound_whenNoKycDocuments() {
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(documentRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.getAccountDocuments(accountId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("No KYC documents");
+    }
+
+    // ── findByIban ─────────────────────────────────────────────────────────────
+
+    @Test
+    void findByIban_shouldReturnAccount_whenFound() {
+        when(accountRepository.findByIban(IBAN)).thenReturn(Optional.of(activeAccount));
+
+        assertThat(accountService.findByIban(IBAN)).contains(activeAccount);
+    }
+
+    @Test
+    void findByIban_shouldReturnEmpty_whenNotFound() {
+        when(accountRepository.findByIban(IBAN)).thenReturn(Optional.empty());
+
+        assertThat(accountService.findByIban(IBAN)).isEmpty();
+    }
+
+    // ── adminDeposit ───────────────────────────────────────────────────────────
+
+    @Test
+    void adminDeposit_shouldAddBalance_whenAccountActive() {
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any())).thenReturn(activeAccount);
+
+        AccountResponse response = accountService.adminDeposit(accountId, new BigDecimal("200.00"));
+
+        verify(accountRepository).save(argThat(a ->
+                a.getBalance().compareTo(new BigDecimal("700.00")) == 0));
+    }
+
+    @Test
+    void adminDeposit_shouldThrowNotFound_whenAccountMissing() {
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.adminDeposit(accountId, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account not found");
+    }
+
+    @Test
+    void adminDeposit_shouldThrow_whenAccountNotActive() {
+        activeAccount.setStatus(Account.Status.BLOCKED);
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.adminDeposit(accountId, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not active");
+    }
+
+    // ── adminWithdrawal ────────────────────────────────────────────────────────
+
+    @Test
+    void adminWithdrawal_shouldSubtractBalance_whenSufficientFunds() {
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any())).thenReturn(activeAccount);
+
+        accountService.adminWithdrawal(accountId, new BigDecimal("100.00"));
+
+        verify(accountRepository).save(argThat(a ->
+                a.getBalance().compareTo(new BigDecimal("400.00")) == 0));
+    }
+
+    @Test
+    void adminWithdrawal_shouldThrow_whenInsufficientFunds() {
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.adminWithdrawal(accountId, new BigDecimal("9999.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Insufficient funds");
+    }
+
+    @Test
+    void adminWithdrawal_shouldThrow_whenAccountNotActive() {
+        activeAccount.setStatus(Account.Status.CLOSED);
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> accountService.adminWithdrawal(accountId, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not active");
+    }
+
+    // ── debitFromSaga ──────────────────────────────────────────────────────────
+
+    @Test
+    void debitFromSaga_shouldSkipProcessing_whenAlreadyProcessed() {
+        UUID txId = UUID.randomUUID();
+        when(processedEventRepository.existsByTransactionIdAndEventType(txId, "DEBIT"))
+                .thenReturn(true);
+
+        accountService.debitFromSaga(txId, accountId, userId, new BigDecimal("100.00"));
+
+        verifyNoInteractions(accountRepository);
+    }
+
+    @Test
+    void debitFromSaga_shouldDebitAndSaveMarker_whenNotYetProcessed() {
+        UUID txId = UUID.randomUUID();
+        when(processedEventRepository.existsByTransactionIdAndEventType(txId, "DEBIT"))
+                .thenReturn(false);
+        when(accountRepository.findWithLockByAccountIdAndUserId(accountId, userId))
+                .thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any())).thenReturn(activeAccount);
+        when(processedEventRepository.save(any(ProcessedSagaEvent.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        accountService.debitFromSaga(txId, accountId, userId, new BigDecimal("100.00"));
+
+        verify(accountRepository).save(argThat(a ->
+                a.getBalance().compareTo(new BigDecimal("400.00")) == 0));
+        verify(processedEventRepository).save(argThat(e ->
+                txId.equals(e.getTransactionId()) && "DEBIT".equals(e.getEventType())));
+    }
+
+    // ── creditFromSaga ─────────────────────────────────────────────────────────
+
+    @Test
+    void creditFromSaga_shouldSkipProcessing_whenAlreadyProcessed() {
+        UUID txId = UUID.randomUUID();
+        when(processedEventRepository.existsByTransactionIdAndEventType(txId, "CREDIT"))
+                .thenReturn(true);
+
+        accountService.creditFromSaga(txId, accountId, new BigDecimal("100.00"));
+
+        verifyNoInteractions(accountRepository);
+    }
+
+    @Test
+    void creditFromSaga_shouldCreditAndSaveMarker_whenNotYetProcessed() {
+        UUID txId = UUID.randomUUID();
+        when(processedEventRepository.existsByTransactionIdAndEventType(txId, "CREDIT"))
+                .thenReturn(false);
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any())).thenReturn(activeAccount);
+        when(processedEventRepository.save(any(ProcessedSagaEvent.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        accountService.creditFromSaga(txId, accountId, new BigDecimal("200.00"));
+
+        verify(accountRepository).save(argThat(a ->
+                a.getBalance().compareTo(new BigDecimal("700.00")) == 0));
+        verify(processedEventRepository).save(argThat(e ->
+                txId.equals(e.getTransactionId()) && "CREDIT".equals(e.getEventType())));
     }
 }

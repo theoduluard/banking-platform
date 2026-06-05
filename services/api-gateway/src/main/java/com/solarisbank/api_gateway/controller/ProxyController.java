@@ -60,6 +60,13 @@ public class ProxyController {
         return forward(request, body, transactionServiceUrl);
     }
 
+    @RequestMapping("/api/v1/scheduled-transfers/**")
+    public ResponseEntity<byte[]> proxyScheduledTransfers(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, transactionServiceUrl);
+    }
+
     @RequestMapping("/api/v1/messages/**")
     public ResponseEntity<byte[]> proxyMessages(
             HttpServletRequest request,

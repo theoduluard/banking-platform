@@ -7,6 +7,7 @@ import com.solarisbank.transaction_service.dto.TransactionResponse;
 import com.solarisbank.transaction_service.dto.TransferRequest;
 import com.solarisbank.transaction_service.exception.BusinessException;
 import com.solarisbank.transaction_service.model.Transaction;
+import com.solarisbank.transaction_service.service.StatementService;
 import com.solarisbank.transaction_service.service.TransactionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -38,6 +40,9 @@ class TransactionControllerTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private StatementService statementService;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -148,6 +153,33 @@ class TransactionControllerTest {
         mockMvc.perform(get("/api/v1/transactions/{id}", transactionId)
                         .header("X-User-Id", userId.toString()))
                 .andExpect(status().isForbidden());
+    }
+
+    // ── GET /api/v1/transactions/statement ────────────────────────────────────
+
+    @Test
+    void getStatement_shouldReturn200_withPdfBytes() throws Exception {
+        byte[] fakePdf = "%PDF-1.4 fake".getBytes();
+        when(statementService.generateStatement(fromAccountId, userId)).thenReturn(fakePdf);
+
+        mockMvc.perform(get("/api/v1/transactions/statement")
+                        .header("X-User-Id", userId.toString())
+                        .param("accountId", fromAccountId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("attachment")));
+    }
+
+    @Test
+    void getStatement_shouldReturn404_whenAccountNotFound() throws Exception {
+        when(statementService.generateStatement(fromAccountId, userId))
+                .thenThrow(new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/transactions/statement")
+                        .header("X-User-Id", userId.toString())
+                        .param("accountId", fromAccountId.toString()))
+                .andExpect(status().isNotFound());
     }
 
     // ── GlobalExceptionHandler — 500 générique ────────────────────────────────

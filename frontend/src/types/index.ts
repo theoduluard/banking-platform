@@ -194,6 +194,32 @@ export interface VerificationDocumentResponse {
   submittedAt: string
 }
 
+// ── Scheduled Transfers ───────────────────────────────────────────────────────
+
+export type TransferFrequency = 'WEEKLY' | 'MONTHLY'
+
+export interface ScheduledTransfer {
+  id: string
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  currency: string
+  description?: string | null
+  frequency: TransferFrequency
+  nextExecutionDate: string   // ISO date: "2025-07-01"
+  active: boolean
+  createdAt: string
+}
+
+export interface ScheduledTransferRequest {
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  description?: string
+  frequency: TransferFrequency
+  firstExecutionDate: string  // ISO date
+}
+
 export interface AdminTransaction {
   id: string
   fromAccountId: string

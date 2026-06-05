@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { useState, useEffect } from 'react'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
-import type { Account, Beneficiary } from '@/types'
+import type { Account, Beneficiary, TransferFrequency } from '@/types'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils'
 import {
   ArrowLeftRight, ArrowLeft, ArrowDown,
   Info, AlertTriangle, Users, CreditCard, Keyboard,
-  Loader2, CheckCircle2, XCircle,
+  Loader2, CheckCircle2, XCircle, CalendarClock,
 } from 'lucide-react'
 
 // ── Types & schema ─────────────────────────────────────────────────────────────
@@ -76,6 +76,15 @@ export default function TransferPage() {
 
   // ── Idempotency key ──────────────────────────────────────────────────────
   const [idempotencyKey, setIdempotencyKey] = useState(() => generateUUID())
+
+  // ── Scheduled transfer state ─────────────────────────────────────────────
+  const [isScheduled,    setIsScheduled]    = useState(false)
+  const [frequency,      setFrequency]      = useState<TransferFrequency>('MONTHLY')
+  const [firstExecDate,  setFirstExecDate]  = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]   // YYYY-MM-DD
+  })
 
   // ── Destination state ────────────────────────────────────────────────────
   const [destType,       setDestType]       = useState<DestType>('own')
@@ -180,22 +189,37 @@ export default function TransferPage() {
     if (!pendingTransfer || !toAccountId) return
     setIsSubmitting(true)
     try {
-      await api.post('/api/v1/transactions/transfer', {
-        fromAccountId: pendingTransfer.fromAccountId,
-        toAccountId,
-        amount:        pendingTransfer.amount,
-        description:   pendingTransfer.description,
-      }, {
-        headers: {
-          'X-User-Id':       userId,
-          'Idempotency-Key': idempotencyKey,
-        },
-      })
-      toast.success('Virement initié ! Traitement en cours.')
-      setIdempotencyKey(generateUUID())
-      navigate('/dashboard')
+      if (isScheduled) {
+        await api.post('/api/v1/scheduled-transfers', {
+          fromAccountId:    pendingTransfer.fromAccountId,
+          toAccountId,
+          amount:           pendingTransfer.amount,
+          description:      pendingTransfer.description,
+          frequency,
+          firstExecutionDate: firstExecDate,
+        }, { headers: { 'X-User-Id': userId } })
+        toast.success('Virement programmé créé avec succès !')
+        navigate('/scheduled-transfers')
+      } else {
+        await api.post('/api/v1/transactions/transfer', {
+          fromAccountId: pendingTransfer.fromAccountId,
+          toAccountId,
+          amount:        pendingTransfer.amount,
+          description:   pendingTransfer.description,
+        }, {
+          headers: {
+            'X-User-Id':       userId,
+            'Idempotency-Key': idempotencyKey,
+          },
+        })
+        toast.success('Virement initié ! Traitement en cours.')
+        setIdempotencyKey(generateUUID())
+        navigate('/dashboard')
+      }
     } catch {
-      toast.error('Le virement a échoué. Vérifiez votre solde.')
+      toast.error(isScheduled
+        ? 'Impossible de créer le virement programmé. Vérifiez les informations.'
+        : 'Le virement a échoué. Vérifiez votre solde.')
     } finally {
       setIsSubmitting(false)
       setPendingTransfer(null)
@@ -473,23 +497,91 @@ export default function TransferPage() {
           {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
         </div>
 
+        {/* ── Scheduled toggle ─────────────────────────────────────────────── */}
+        <div className={cn(
+          'rounded-xl border p-4 transition-colors',
+          isScheduled ? 'border-primary/30 bg-primary/5' : 'border-muted bg-muted/30',
+        )}>
+          <button
+            type="button"
+            onClick={() => setIsScheduled(v => !v)}
+            className="flex w-full items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className={cn(
+                'flex size-8 items-center justify-center rounded-lg transition-colors',
+                isScheduled ? 'bg-primary text-white' : 'bg-muted text-muted-foreground',
+              )}>
+                <CalendarClock size={15} />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium">Programmer ce virement</p>
+                <p className="text-xs text-muted-foreground">
+                  {isScheduled ? `${frequency === 'MONTHLY' ? 'Mensuel' : 'Hebdomadaire'} · à partir du ${firstExecDate}` : 'Exécution unique immédiate'}
+                </p>
+              </div>
+            </div>
+            <div className={cn(
+              'h-5 w-9 rounded-full transition-colors flex items-center px-0.5',
+              isScheduled ? 'bg-primary' : 'bg-border',
+            )}>
+              <div className={cn(
+                'size-4 rounded-full bg-white shadow transition-transform',
+                isScheduled ? 'translate-x-4' : 'translate-x-0',
+              )} />
+            </div>
+          </button>
+
+          {isScheduled && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Fréquence</Label>
+                <Select
+                  value={frequency}
+                  onValueChange={v => setFrequency(v as TransferFrequency)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MONTHLY">Mensuel</SelectItem>
+                    <SelectItem value="WEEKLY">Hebdomadaire</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Première exécution</Label>
+                <input
+                  type="date"
+                  value={firstExecDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setFirstExecDate(e.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Info ────────────────────────────────────────────────────────── */}
-        <Card className="border-muted bg-muted/40">
-          <CardContent className="flex items-start gap-2.5 py-3 px-4">
-            <Info size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Le virement est traité de manière sécurisée. Le solde sera mis à jour en quelques secondes.
-            </p>
-          </CardContent>
-        </Card>
+        {!isScheduled && (
+          <Card className="border-muted bg-muted/40">
+            <CardContent className="flex items-start gap-2.5 py-3 px-4">
+              <Info size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Le virement est traité de manière sécurisée. Le solde sera mis à jour en quelques secondes.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Button
           type="submit"
           className="h-11 w-full gap-2 text-sm font-medium"
           disabled={!toAccountId}
         >
-          <ArrowLeftRight size={15} />
-          <span>Vérifier et confirmer</span>
+          {isScheduled ? <CalendarClock size={15} /> : <ArrowLeftRight size={15} />}
+          <span>{isScheduled ? 'Programmer le virement' : 'Vérifier et confirmer'}</span>
         </Button>
       </form>
 
@@ -501,8 +593,10 @@ export default function TransferPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight size={18} className="text-primary" />
-              Confirmer le virement
+              {isScheduled
+                ? <CalendarClock size={18} className="text-primary" />
+                : <ArrowLeftRight size={18} className="text-primary" />}
+              {isScheduled ? 'Confirmer le virement programmé' : 'Confirmer le virement'}
             </DialogTitle>
             <DialogDescription>
               Vérifiez les détails ci-dessous avant d'envoyer.
@@ -550,11 +644,23 @@ export default function TransferPage() {
                 </div>
               )}
 
+              {/* Scheduled info */}
+              {isScheduled && (
+                <div className="rounded-lg border bg-muted/40 px-4 py-3">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Récurrence</p>
+                  <p className="text-sm font-medium">
+                    {frequency === 'MONTHLY' ? 'Mensuel' : 'Hebdomadaire'} · à partir du {firstExecDate}
+                  </p>
+                </div>
+              )}
+
               {/* Warning */}
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
                 <p className="text-xs leading-relaxed text-amber-700">
-                  Cette opération est <strong>irréversible</strong>. Vérifiez le destinataire avant de confirmer.
+                  {isScheduled
+                    ? 'Ce virement se répètera automatiquement. Vous pourrez l\'annuler depuis la page Virements programmés.'
+                    : <>Cette opération est <strong>irréversible</strong>. Vérifiez le destinataire avant de confirmer.</>}
                 </p>
               </div>
             </div>
@@ -570,7 +676,7 @@ export default function TransferPage() {
               Annuler
             </Button>
             <Button onClick={onConfirm} disabled={isSubmitting} className="flex-1 gap-2">
-              <ArrowLeftRight size={14} />
+              {isScheduled ? <CalendarClock size={14} /> : <ArrowLeftRight size={14} />}
               <span>{isSubmitting ? 'Envoi…' : 'Confirmer'}</span>
             </Button>
           </DialogFooter>

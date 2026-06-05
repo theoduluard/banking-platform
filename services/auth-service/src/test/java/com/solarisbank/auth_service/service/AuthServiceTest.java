@@ -23,6 +23,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -270,6 +272,321 @@ class AuthServiceTest {
                 .hasMessageContaining("expired");
 
         verify(otpChallengeRepository).delete(challenge);
+    }
+
+    // ── login — additional edge cases ─────────────────────────────────────────
+
+    @Test
+    void login_shouldThrowForbidden_whenEmailIsNotVerified() {
+        savedUser.setEmailVerified(false);
+        when(authenticationManager.authenticate(any())).thenReturn(null);
+        when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(savedUser));
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Email not verified");
+    }
+
+    @Test
+    void login_shouldThrowUnauthorized_whenAccountIsDisabled() {
+        savedUser.setIsActive(false);
+        when(authenticationManager.authenticate(any())).thenReturn(null);
+        when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(savedUser));
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account is disabled");
+    }
+
+    // ── resendOtp ─────────────────────────────────────────────────────────────
+
+    @Test
+    void resendOtp_shouldRegenerateCodeAndSendEmail_whenSessionIsValid() {
+        OtpChallenge challenge = OtpChallenge.builder()
+                .sessionToken("valid-session")
+                .user(savedUser)
+                .codeHash(sha256ForTest("123456"))
+                .attempts(1)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(otpChallengeRepository.findBySessionToken("valid-session"))
+                .thenReturn(Optional.of(challenge));
+        when(otpChallengeRepository.save(any(OtpChallenge.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        authService.resendOtp("valid-session");
+
+        verify(otpChallengeRepository).save(argThat(c ->
+                c.getAttempts() == 0
+                && c.getExpiresAt().isAfter(LocalDateTime.now())
+        ));
+        verify(emailService).sendOtpEmail(
+                eq("john.doe@example.com"), eq("John"), anyString());
+    }
+
+    @Test
+    void resendOtp_shouldThrowUnauthorized_whenSessionNotFound() {
+        when(otpChallengeRepository.findBySessionToken("bad-session"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resendOtp("bad-session"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired OTP session");
+    }
+
+    // ── verifyEmail ────────────────────────────────────────────────────────────
+
+    @Test
+    void verifyEmail_shouldActivateUser_whenTokenIsValid() {
+        savedUser.setEmailVerified(false);
+        savedUser.setEmailVerificationToken("valid-token");
+        savedUser.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(1));
+
+        when(userRepository.findByEmailVerificationToken("valid-token"))
+                .thenReturn(Optional.of(savedUser));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.verifyEmail("valid-token");
+
+        verify(userRepository).save(argThat(u ->
+                Boolean.TRUE.equals(u.getEmailVerified())
+                && u.getEmailVerificationToken() == null
+        ));
+    }
+
+    @Test
+    void verifyEmail_shouldThrowNotFound_whenTokenIsInvalid() {
+        when(userRepository.findByEmailVerificationToken("bad-token"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyEmail("bad-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired verification token");
+    }
+
+    @Test
+    void verifyEmail_shouldThrowGone_whenTokenIsExpired() {
+        savedUser.setEmailVerificationToken("expired-token");
+        savedUser.setEmailVerificationTokenExpiry(LocalDateTime.now().minusHours(1));
+
+        when(userRepository.findByEmailVerificationToken("expired-token"))
+                .thenReturn(Optional.of(savedUser));
+
+        assertThatThrownBy(() -> authService.verifyEmail("expired-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Verification token has expired");
+    }
+
+    // ── resendVerification ─────────────────────────────────────────────────────
+
+    @Test
+    void resendVerification_shouldSendEmail_whenUserExistsAndNotVerified() {
+        savedUser.setEmailVerified(false);
+        when(userRepository.findByEmail("john.doe@example.com"))
+                .thenReturn(Optional.of(savedUser));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.resendVerification("john.doe@example.com");
+
+        verify(emailService).sendVerificationEmail(
+                eq("john.doe@example.com"), eq("John"), anyString());
+    }
+
+    @Test
+    void resendVerification_shouldThrowBadRequest_whenEmailAlreadyVerified() {
+        savedUser.setEmailVerified(true);
+        when(userRepository.findByEmail("john.doe@example.com"))
+                .thenReturn(Optional.of(savedUser));
+
+        assertThatThrownBy(() -> authService.resendVerification("john.doe@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("already verified");
+    }
+
+    @Test
+    void resendVerification_shouldThrowNotFound_whenUserDoesNotExist() {
+        when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resendVerification("nobody@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("User not found");
+    }
+
+    // ── requestPasswordReset ──────────────────────────────────────────────────
+
+    @Test
+    void requestPasswordReset_shouldSendEmail_whenUserExists() {
+        when(userRepository.findByEmail("john.doe@example.com"))
+                .thenReturn(Optional.of(savedUser));
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.requestPasswordReset("john.doe@example.com");
+
+        verify(emailService).sendPasswordResetEmail(
+                eq("john.doe@example.com"), eq("John"), anyString());
+    }
+
+    @Test
+    void requestPasswordReset_shouldDoNothing_whenUserDoesNotExist() {
+        when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+
+        // No exception — security: don't reveal whether address is registered
+        authService.requestPasswordReset("ghost@example.com");
+
+        verifyNoInteractions(emailService);
+        verify(userRepository, never()).save(any());
+    }
+
+    // ── resetPassword ─────────────────────────────────────────────────────────
+
+    @Test
+    void resetPassword_shouldUpdatePassword_whenTokenIsValid() {
+        savedUser.setPasswordResetToken("reset-tok");
+        savedUser.setPasswordResetTokenExpiry(LocalDateTime.now().plusHours(1));
+
+        when(userRepository.findByPasswordResetToken("reset-tok"))
+                .thenReturn(Optional.of(savedUser));
+        when(passwordEncoder.encode("NewSecret@99")).thenReturn("new_encoded");
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.resetPassword("reset-tok", "NewSecret@99");
+
+        verify(userRepository).save(argThat(u ->
+                "new_encoded".equals(u.getPassword())
+                && u.getPasswordResetToken() == null
+        ));
+    }
+
+    @Test
+    void resetPassword_shouldThrowNotFound_whenTokenIsInvalid() {
+        when(userRepository.findByPasswordResetToken("unknown-tok"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resetPassword("unknown-tok", "pass"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or already used reset token");
+    }
+
+    @Test
+    void resetPassword_shouldThrowGone_whenTokenIsExpired() {
+        savedUser.setPasswordResetToken("exp-tok");
+        savedUser.setPasswordResetTokenExpiry(LocalDateTime.now().minusMinutes(1));
+
+        when(userRepository.findByPasswordResetToken("exp-tok"))
+                .thenReturn(Optional.of(savedUser));
+
+        assertThatThrownBy(() -> authService.resetPassword("exp-tok", "pass"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Reset token has expired");
+    }
+
+    // ── refresh ───────────────────────────────────────────────────────────────
+
+    @Test
+    void refresh_shouldReturnNewTokenPair_whenRefreshTokenIsValid() {
+        String rawToken = "raw-refresh-token";
+        RefreshToken stored = RefreshToken.builder()
+                .tokenHash(sha256ForTest(rawToken))
+                .user(savedUser)
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .build();
+
+        when(refreshTokenRepository.findByTokenHash(sha256ForTest(rawToken)))
+                .thenReturn(Optional.of(stored));
+        when(jwtService.generateAccessToken(anyString(), anyString(), any(UUID.class)))
+                .thenReturn("new_access_token");
+        when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LoginResponse response = authService.refresh(rawToken);
+
+        assertThat(response.getAccessToken()).isEqualTo("new_access_token");
+        verify(refreshTokenRepository).delete(stored);
+    }
+
+    @Test
+    void refresh_shouldThrowUnauthorized_whenTokenIsInvalid() {
+        when(refreshTokenRepository.findByTokenHash(anyString()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refresh("unknown-refresh-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired refresh token");
+    }
+
+    @Test
+    void refresh_shouldThrowUnauthorized_whenTokenIsExpired() {
+        String rawToken = "expired-token";
+        RefreshToken expired = RefreshToken.builder()
+                .tokenHash(sha256ForTest(rawToken))
+                .user(savedUser)
+                .expiresAt(LocalDateTime.now().minusDays(1))
+                .build();
+
+        when(refreshTokenRepository.findByTokenHash(sha256ForTest(rawToken)))
+                .thenReturn(Optional.of(expired));
+
+        assertThatThrownBy(() -> authService.refresh(rawToken))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("expired");
+
+        verify(refreshTokenRepository).delete(expired);
+    }
+
+    @Test
+    void refresh_shouldThrowUnauthorized_whenAccountIsDisabled() {
+        savedUser.setIsActive(false);
+        String rawToken = "some-token";
+        RefreshToken stored = RefreshToken.builder()
+                .tokenHash(sha256ForTest(rawToken))
+                .user(savedUser)
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+
+        when(refreshTokenRepository.findByTokenHash(sha256ForTest(rawToken)))
+                .thenReturn(Optional.of(stored));
+
+        assertThatThrownBy(() -> authService.refresh(rawToken))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account is disabled");
+    }
+
+    // ── logout ────────────────────────────────────────────────────────────────
+
+    @Test
+    void logout_shouldDeleteToken_whenTokenIsProvided() {
+        authService.logout("some-refresh-token");
+
+        verify(refreshTokenRepository).deleteByTokenHash(sha256ForTest("some-refresh-token"));
+    }
+
+    @Test
+    void logout_shouldDoNothing_whenTokenIsNull() {
+        authService.logout(null);
+
+        verifyNoInteractions(refreshTokenRepository);
+    }
+
+    @Test
+    void logout_shouldDoNothing_whenTokenIsBlank() {
+        authService.logout("   ");
+
+        verifyNoInteractions(refreshTokenRepository);
+    }
+
+    // ── cleanupExpiredTokens ──────────────────────────────────────────────────
+
+    @Test
+    void cleanupExpiredTokens_shouldDeleteExpiredRefreshTokensAndOtpChallenges() {
+        when(refreshTokenRepository.deleteByExpiresAtBefore(any(LocalDateTime.class)))
+                .thenReturn(3);
+        when(otpChallengeRepository.deleteByExpiresAtBefore(any(LocalDateTime.class)))
+                .thenReturn(2);
+
+        authService.cleanupExpiredTokens();
+
+        verify(refreshTokenRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
+        verify(otpChallengeRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
     }
 
     // ── Helper — mirrors AuthService.sha256() ─────────────────────────────────

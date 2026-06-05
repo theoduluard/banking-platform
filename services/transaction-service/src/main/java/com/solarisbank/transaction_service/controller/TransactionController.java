@@ -2,14 +2,19 @@ package com.solarisbank.transaction_service.controller;
 
 import com.solarisbank.transaction_service.dto.TransactionResponse;
 import com.solarisbank.transaction_service.dto.TransferRequest;
+import com.solarisbank.transaction_service.service.StatementService;
 import com.solarisbank.transaction_service.service.TransactionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @RestController
@@ -18,6 +23,7 @@ import java.util.UUID;
 public class TransactionController {
 
     private final TransactionService transactionService;
+    private final StatementService   statementService;
 
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> transfer(
@@ -39,6 +45,28 @@ public class TransactionController {
             @RequestParam(defaultValue = "20") int size) {
 
         return ResponseEntity.ok(transactionService.getHistory(accountId, userId, page, size));
+    }
+
+    /**
+     * Generates and returns a PDF bank statement for the given account.
+     * Ownership is validated inside StatementService via accountClient.getAccount().
+     */
+    @GetMapping("/statement")
+    public ResponseEntity<byte[]> getStatement(
+            @RequestParam UUID accountId,
+            @RequestHeader("X-User-Id") UUID userId) {
+
+        byte[] pdf = statementService.generateStatement(accountId, userId);
+
+        String filename = "releve-" + LocalDate.now() + ".pdf";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(
+                ContentDisposition.attachment().filename(filename).build());
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(pdf);
     }
 
     @GetMapping("/{id}")

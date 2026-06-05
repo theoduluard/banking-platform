@@ -21,7 +21,7 @@ import {
 import {
   ArrowLeftRight, ArrowLeft, ArrowDownLeft, ArrowUpRight,
   Clock, CreditCard, PiggyBank, RefreshCw,
-  TrendingDown, TrendingUp, XCircle,
+  TrendingDown, TrendingUp, XCircle, Download,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
@@ -104,7 +104,8 @@ export default function AccountDetailPage() {
   const [page,         setPage]         = useState(0)
   const [txFilter,     setTxFilter]     = useState<TxFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
-  const [closeError,   setCloseError]   = useState<string | null>(null)
+  const [closeError,       setCloseError]       = useState<string | null>(null)
+  const [downloadingPdf,   setDownloadingPdf]   = useState(false)
 
   // Reset to page 0 when filters change
   useEffect(() => setPage(0), [txFilter, statusFilter])
@@ -133,6 +134,28 @@ export default function AccountDetailPage() {
       return hasPending ? 3000 : false
     },
   })
+
+  async function downloadStatement() {
+    if (!id) return
+    setDownloadingPdf(true)
+    try {
+      const response = await api.get(`/api/v1/transactions/statement?accountId=${id}`, {
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const a   = document.createElement('a')
+      a.href    = url
+      a.download = `releve-${id?.slice(0, 8)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
 
   const closeMutation = useMutation({
     mutationFn: () =>
@@ -222,13 +245,25 @@ export default function AccountDetailPage() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <Badge variant="secondary" className="border-0 text-[10px] bg-white/20 text-white">
-                  {account.status === 'ACTIVE'             ? 'Actif'
-                   : account.status === 'PENDING_APPROVAL' ? 'En attente'
-                   : account.status === 'REJECTED'         ? 'Rejeté'
-                   : account.status === 'BLOCKED'          ? 'Bloqué'
-                   : 'Fermé'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="border-0 text-[10px] bg-white/20 text-white">
+                    {account.status === 'ACTIVE'             ? 'Actif'
+                     : account.status === 'PENDING_APPROVAL' ? 'En attente'
+                     : account.status === 'REJECTED'         ? 'Rejeté'
+                     : account.status === 'BLOCKED'          ? 'Bloqué'
+                     : 'Fermé'}
+                  </Badge>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={downloadStatement}
+                    disabled={downloadingPdf}
+                    className="gap-1.5 bg-white/10 text-white hover:bg-white/20 border-0 text-[10px] h-6 px-2"
+                  >
+                    <Download size={11} />
+                    {downloadingPdf ? '…' : 'Relevé PDF'}
+                  </Button>
+                </div>
                 {account.status === 'ACTIVE' && (
                   <div className="mt-auto flex items-center gap-2">
                     <Link

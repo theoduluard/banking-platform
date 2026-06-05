@@ -17,8 +17,9 @@ import KYCPage           from '@/pages/KYCPage'
 import DashboardPage     from '@/pages/DashboardPage'
 import AccountDetailPage from '@/pages/AccountDetailPage'
 import NewAccountPage    from '@/pages/NewAccountPage'
-import TransferPage       from '@/pages/TransferPage'
-import BeneficiariesPage  from '@/pages/BeneficiariesPage'
+import TransferPage            from '@/pages/TransferPage'
+import ScheduledTransfersPage from '@/pages/ScheduledTransfersPage'
+import BeneficiariesPage      from '@/pages/BeneficiariesPage'
 import MessagesPage       from '@/pages/MessagesPage'
 import RequestsPage       from '@/pages/RequestsPage'
 
@@ -59,8 +60,9 @@ export default function App() {
             <Route path="/dashboard"    element={<DashboardPage />} />
             <Route path="/accounts/new" element={<NewAccountPage />} />
             <Route path="/accounts/:id" element={<AccountDetailPage />} />
-            <Route path="/transfer"       element={<TransferPage />} />
-            <Route path="/beneficiaries" element={<BeneficiariesPage />} />
+            <Route path="/transfer"              element={<TransferPage />} />
+            <Route path="/scheduled-transfers"  element={<ScheduledTransfersPage />} />
+            <Route path="/beneficiaries"        element={<BeneficiariesPage />} />
             <Route path="/messages"      element={<MessagesPage />} />
             <Route path="/requests"      element={<RequestsPage />} />
           </Route>
