@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -78,22 +80,66 @@ public class AuthService {
 
         userRepository.save(user);
         emailService.sendVerificationEmail(user.getEmail(), user.getFirstname(), token);
-        log.info("[Register] New user {} — verification email sent", user.getEmail());
+        log.info("[Register] New user id={} — verification email sent", user.getUserId());
         return user;
     }
 
     /**
      * Step 1 of login: validates credentials, generates a 6-digit OTP, sends it by
      * email, and returns an opaque session token the frontend stores until step 2.
+     *
+     * <p>Account lockout thresholds (progressive back-off):
+     * <ul>
+     *   <li>≥ 5 consecutive failures → locked for 30 seconds</li>
+     *   <li>≥ 10 consecutive failures → locked for 5 minutes</li>
+     *   <li>≥ 15 consecutive failures → locked for 1 hour</li>
+     * </ul>
+     * The counter resets to 0 on the first successful authentication.
      */
     @Transactional
     public OtpChallengeResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        // Look up the user first so we can check / update the lockout state.
+        // We intentionally do this before calling authenticationManager so that a
+        // locked account short-circuits immediately without a DB password-hash comparison.
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+        // Enforce lockout before attempting any authentication
+        if (user != null
+                && user.getLockedUntil() != null
+                && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            long remaining = java.time.Duration.between(LocalDateTime.now(), user.getLockedUntil()).toSeconds();
+            throw new BusinessException(
+                    "Account temporarily locked. Try again in " + remaining + " second(s).",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        } catch (DisabledException e) {
+            throw new BusinessException("Account is disabled", HttpStatus.UNAUTHORIZED);
+        } catch (BadCredentialsException e) {
+            if (user != null) {
+                int attempts = user.getFailedLoginAttempts() + 1;
+                user.setFailedLoginAttempts(attempts);
+                user.setLockedUntil(computeLockout(attempts));
+                userRepository.save(user);
+            }
+            throw new BusinessException("Invalid credentials", HttpStatus.UNAUTHORIZED);
+        }
+
+        // Authentication succeeded — load fresh user entity if we had no record above
+        if (user == null) {
+            user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+        }
+
+        // Reset the failure counter on successful authentication
+        if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
+            user.setFailedLoginAttempts(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
+        }
 
         // NULL = pre-existing user (backward compat) → allowed
         // FALSE = registered after email-verification was introduced → must verify
@@ -108,7 +154,7 @@ public class AuthService {
         // Replace any previous pending challenge for this user
         otpChallengeRepository.deleteByUser(user);
 
-        String rawCode     = String.format("%06d", secureRandom.nextInt(1_000_000));
+        String rawCode      = String.format("%06d", secureRandom.nextInt(1_000_000));
         String sessionToken = UUID.randomUUID().toString();
 
         otpChallengeRepository.save(OtpChallenge.builder()
@@ -120,9 +166,20 @@ public class AuthService {
                 .build());
 
         emailService.sendOtpEmail(user.getEmail(), user.getFirstname(), rawCode);
-        log.info("[Login] OTP challenge issued for user={}", user.getEmail());
+        log.info("[Login] OTP challenge issued for user id={}", user.getUserId());
 
         return new OtpChallengeResponse(sessionToken);
+    }
+
+    /**
+     * Returns the lock-expiry instant for a given failed-attempt count,
+     * or {@code null} if the threshold has not yet been reached.
+     */
+    private LocalDateTime computeLockout(int failedAttempts) {
+        if (failedAttempts >= 15) return LocalDateTime.now().plusHours(1);
+        if (failedAttempts >= 10) return LocalDateTime.now().plusMinutes(5);
+        if (failedAttempts >= 5)  return LocalDateTime.now().plusSeconds(30);
+        return null;
     }
 
     /**
@@ -158,7 +215,7 @@ public class AuthService {
         User user = challenge.getUser();
         otpChallengeRepository.delete(challenge);
 
-        log.info("[OTP] Verified for user={}", user.getEmail());
+        log.info("[OTP] Verified for user id={}", user.getUserId());
         return buildLoginResponse(user);
     }
 
@@ -182,7 +239,7 @@ public class AuthService {
                 challenge.getUser().getEmail(),
                 challenge.getUser().getFirstname(),
                 rawCode);
-        log.info("[OTP] Code resent for user={}", challenge.getUser().getEmail());
+        log.info("[OTP] Code resent for user id={}", challenge.getUser().getUserId());
     }
 
     // ── Email verification ────────────────────────────────────────────────────
@@ -201,24 +258,26 @@ public class AuthService {
         user.setEmailVerificationToken(null);
         user.setEmailVerificationTokenExpiry(null);
         userRepository.save(user);
-        log.info("[Verify] Email verified for user {}", user.getEmail());
+        log.info("[Verify] Email verified for user id={}", user.getUserId());
     }
 
+    /**
+     * Re-sends the email-verification link.
+     * Always returns silently — never reveals whether the address is registered
+     * or whether it is already verified (prevents email enumeration attacks).
+     */
     public void resendVerification(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
-
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
-            throw new BusinessException("Email is already verified.", HttpStatus.BAD_REQUEST);
-        }
-
-        String token = UUID.randomUUID().toString();
-        user.setEmailVerificationToken(token);
-        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-        userRepository.save(user);
-
-        emailService.sendVerificationEmail(user.getEmail(), user.getFirstname(), token);
-        log.info("[Verify] Resent verification email to {}", email);
+        userRepository.findByEmail(email)
+                .filter(u -> !Boolean.TRUE.equals(u.getEmailVerified()))
+                .ifPresent(u -> {
+                    String token = UUID.randomUUID().toString();
+                    u.setEmailVerificationToken(token);
+                    u.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+                    userRepository.save(u);
+                    emailService.sendVerificationEmail(u.getEmail(), u.getFirstname(), token);
+                    log.info("[Verify] Resent verification email to user id={}", u.getUserId());
+                });
+        // Intentionally no error thrown — caller always sees HTTP 200
     }
 
     // ── Password reset ────────────────────────────────────────────────────────
@@ -234,10 +293,10 @@ public class AuthService {
             user.setPasswordResetTokenExpiry(LocalDateTime.now().plusHours(1));
             userRepository.save(user);
             emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstname(), token);
-            log.info("[Reset] Password reset email sent to {}", email);
+            log.info("[Reset] Password reset email sent to user id={}", user.getUserId());
         });
-        // Log at info level even when user doesn't exist — do not distinguish in response
-        log.info("[Reset] Password reset requested for {}", email);
+        // Always log at info level — do not distinguish whether the address was found
+        log.info("[Reset] Password reset requested");
     }
 
     /**
@@ -258,7 +317,7 @@ public class AuthService {
         user.setPasswordResetToken(null);
         user.setPasswordResetTokenExpiry(null);
         userRepository.save(user);
-        log.info("[Reset] Password successfully reset for user {}", user.getEmail());
+        log.info("[Reset] Password successfully reset for user id={}", user.getUserId());
     }
 
     // ── Refresh token ────────────────────────────────────────────────────────
@@ -293,7 +352,7 @@ public class AuthService {
         // Rotate: remove the old token so it can never be reused
         refreshTokenRepository.delete(stored);
 
-        log.info("[Refresh] Issuing new token pair for user={}", user.getEmail());
+        log.info("[Refresh] Issuing new token pair for user id={}", user.getUserId());
         return buildLoginResponse(user);
     }
 

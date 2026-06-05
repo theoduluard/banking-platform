@@ -270,7 +270,7 @@ services:
     depends_on:
       - prometheus
     environment:
-      GF_SECURITY_ADMIN_PASSWORD:  ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD:  ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD secret must be set}
       GF_USERS_ALLOW_SIGN_UP:      'false'
       GF_SERVER_ROOT_URL:          ${GRAFANA_PUBLIC_URL:-http://localhost:3000}
       # Anonymous read-only access — no login required to view dashboards

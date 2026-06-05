@@ -175,13 +175,16 @@ class AuthServiceTest {
 
     @Test
     void login_shouldThrowException_whenAuthenticationFails() {
+        // userRepository is called once for the lockout pre-check (returns empty → no lock)
+        when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.empty());
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("Bad credentials"));
 
+        // BadCredentialsException is now caught and re-thrown as BusinessException
         assertThatThrownBy(() -> authService.login(loginRequest))
-                .isInstanceOf(BadCredentialsException.class);
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid credentials");
 
-        verify(userRepository, never()).findByEmail(anyString());
         verify(otpChallengeRepository, never()).save(any());
     }
 
@@ -394,23 +397,29 @@ class AuthServiceTest {
     }
 
     @Test
-    void resendVerification_shouldThrowBadRequest_whenEmailAlreadyVerified() {
+    void resendVerification_shouldDoNothing_whenEmailAlreadyVerified() {
+        // The method now uses ifPresent + filter — already-verified users are silently skipped
         savedUser.setEmailVerified(true);
         when(userRepository.findByEmail("john.doe@example.com"))
                 .thenReturn(Optional.of(savedUser));
 
-        assertThatThrownBy(() -> authService.resendVerification("john.doe@example.com"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("already verified");
+        // Must not throw and must not send any email
+        authService.resendVerification("john.doe@example.com");
+
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
-    void resendVerification_shouldThrowNotFound_whenUserDoesNotExist() {
+    void resendVerification_shouldDoNothing_whenUserDoesNotExist() {
+        // Unknown addresses are silently ignored to prevent email enumeration
         when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.resendVerification("nobody@example.com"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("User not found");
+        // Must not throw and must not send any email
+        authService.resendVerification("nobody@example.com");
+
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
+        verify(userRepository, never()).save(any());
     }
 
     // ── requestPasswordReset ──────────────────────────────────────────────────

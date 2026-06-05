@@ -66,6 +66,21 @@ public class User {
     /** Password reset token expires 1 h after issuance. */
     private LocalDateTime passwordResetTokenExpiry;
 
+    /**
+     * Consecutive failed login attempts since the last successful login.
+     * Reset to 0 on success; incremented on BadCredentialsException.
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    /**
+     * When non-null the account is locked and login is refused until this instant.
+     * Thresholds: ≥5 attempts → +30 s, ≥10 → +5 min, ≥15 → +1 h.
+     * Reset to null on successful authentication.
+     */
+    private LocalDateTime lockedUntil;
+
     @PrePersist
     public void prePersist(){
         this.createdAt = LocalDate.now();
