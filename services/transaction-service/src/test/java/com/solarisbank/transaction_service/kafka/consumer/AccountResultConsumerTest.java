@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.transaction_service.client.AccountClient;
+import com.solarisbank.transaction_service.client.dto.AccountResponse;
 import com.solarisbank.transaction_service.kafka.event.CreditRequestedEvent;
 import com.solarisbank.transaction_service.kafka.event.DebitResultEvent;
 import com.solarisbank.transaction_service.kafka.event.CreditResultEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionCompletedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionFailedEvent;
 import com.solarisbank.transaction_service.kafka.producer.SagaEventProducer;
 import com.solarisbank.transaction_service.model.Transaction;
 import com.solarisbank.transaction_service.repository.TransactionRepository;
@@ -128,7 +131,11 @@ class AccountResultConsumerTest {
 
         verify(transactionRepository).save(argThat(t ->
                 t.getStatus() == Transaction.Status.FAILED));
-        verifyNoInteractions(sagaEventProducer);
+        // Sender must be notified that the transfer failed
+        verify(sagaEventProducer).publishTransactionFailed(argThat(e ->
+                e.getTransactionId().equals(transactionId)
+                && e.getSenderUserId().equals(pendingTransaction.getInitiatedByUserId())
+                && "Insufficient funds".equals(e.getReason())));
     }
 
     @Test
@@ -154,11 +161,22 @@ class AccountResultConsumerTest {
         when(transactionRepository.findById(transactionId))
                 .thenReturn(Optional.of(debitConfirmedTransaction));
 
+        // Stub internal account lookup used for recipient userId resolution
+        AccountResponse recipientAccount = new AccountResponse();
+        recipientAccount.setUserId(UUID.randomUUID());
+        when(accountClient.getAccountInternal(debitConfirmedTransaction.getToAccountId()))
+                .thenReturn(recipientAccount);
+
         consumer.onCreditResult(payload);
 
         verify(transactionRepository).save(argThat(t ->
                 t.getStatus() == Transaction.Status.COMPLETED
                 && t.getCompletedAt() != null));
+        // Notification event must be published for both parties
+        verify(sagaEventProducer).publishTransactionCompleted(argThat(e ->
+                e.getTransactionId().equals(transactionId)
+                && e.getSenderUserId().equals(debitConfirmedTransaction.getInitiatedByUserId())
+                && e.getRecipientUserId().equals(recipientAccount.getUserId())));
     }
 
     @Test
@@ -173,12 +191,17 @@ class AccountResultConsumerTest {
 
         // Compensation : re-crédit du compte source
         verify(accountClient).credit(
-                pendingTransaction.getFromAccountId(),
-                pendingTransaction.getAmount());
+                debitConfirmedTransaction.getFromAccountId(),
+                debitConfirmedTransaction.getAmount());
 
         // Transaction marquée FAILED
         verify(transactionRepository).save(argThat(t ->
                 t.getStatus() == Transaction.Status.FAILED));
+
+        // Sender must be notified that the transfer failed
+        verify(sagaEventProducer).publishTransactionFailed(argThat(e ->
+                e.getTransactionId().equals(transactionId)
+                && "Account blocked".equals(e.getReason())));
     }
 
     // ── Poison-pill / invalid JSON ─────────────────────────────────────────────

@@ -131,6 +131,24 @@ public class AccountController {
     }
 
     /**
+     * Returns full account metadata without an ownership check.
+     * Secured by X-Internal-Secret — only reachable from backend services, not from the
+     * api-gateway (which never forwards the internal secret to downstream services on behalf
+     * of a regular user).
+     * Used by transaction-service to resolve the recipient's userId for notification events.
+     */
+    @GetMapping("/{id}/internal")
+    public ResponseEntity<AccountResponse> getAccountInternal(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-Internal-Secret", required = false) String providedSecret) {
+
+        if (!internalSecret.equals(providedSecret)) {
+            throw new BusinessException("Unauthorized — internal endpoint", HttpStatus.UNAUTHORIZED);
+        }
+        return ResponseEntity.ok(accountService.getAccountInternal(id));
+    }
+
+    /**
      * /credit is an internal endpoint called only by transaction-service.
      * Unlike /debit (which is ownership-checked via X-User-Id + findByAccountIdAndUserId),
      * /credit performs no ownership validation — any authenticated user reaching it could

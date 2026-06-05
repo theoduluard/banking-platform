@@ -6,6 +6,8 @@ import com.solarisbank.transaction_service.kafka.config.KafkaTopicConfig;
 import com.solarisbank.transaction_service.kafka.event.CreditRequestedEvent;
 import com.solarisbank.transaction_service.kafka.event.CreditResultEvent;
 import com.solarisbank.transaction_service.kafka.event.DebitResultEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionCompletedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionFailedEvent;
 import com.solarisbank.transaction_service.kafka.producer.SagaEventProducer;
 import com.solarisbank.transaction_service.model.Transaction;
 import com.solarisbank.transaction_service.repository.TransactionRepository;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -77,6 +80,18 @@ public class AccountResultConsumer {
             tx.setStatus(Transaction.Status.FAILED);
             transactionRepository.save(tx);
             log.warn("Debit FAILED for transaction {}: {}", tx.getId(), event.getErrorMessage());
+            // Notify sender that the transfer failed
+            sagaEventProducer.publishTransactionFailed(TransactionFailedEvent.builder()
+                    .transactionId(tx.getId())
+                    .fromAccountId(tx.getFromAccountId())
+                    .toAccountId(tx.getToAccountId())
+                    .senderUserId(tx.getInitiatedByUserId())
+                    .amount(tx.getAmount())
+                    .currency(tx.getCurrency())
+                    .description(tx.getDescription())
+                    .reason(event.getErrorMessage())
+                    .failedAt(LocalDateTime.now())
+                    .build());
         }
     }
 
@@ -110,9 +125,32 @@ public class AccountResultConsumer {
         if (event.isSuccess()) {
             // Crédit OK → COMPLETED
             tx.setStatus(Transaction.Status.COMPLETED);
-            tx.setCompletedAt(LocalDateTime.now());
+            LocalDateTime now = LocalDateTime.now();
+            tx.setCompletedAt(now);
             transactionRepository.save(tx);
             log.info("Transaction {} COMPLETED", tx.getId());
+
+            // Resolve recipient's userId to fan-out notifications to both parties.
+            // Best-effort: if the lookup fails we still notify the sender.
+            UUID recipientUserId = null;
+            try {
+                var recipientAccount = accountClient.getAccountInternal(tx.getToAccountId());
+                recipientUserId = recipientAccount.getUserId();
+            } catch (Exception e) {
+                log.warn("Could not resolve recipient userId for transaction {} — recipient will not be notified: {}",
+                        tx.getId(), e.getMessage());
+            }
+            sagaEventProducer.publishTransactionCompleted(TransactionCompletedEvent.builder()
+                    .transactionId(tx.getId())
+                    .fromAccountId(tx.getFromAccountId())
+                    .toAccountId(tx.getToAccountId())
+                    .senderUserId(tx.getInitiatedByUserId())
+                    .recipientUserId(recipientUserId)
+                    .amount(tx.getAmount())
+                    .currency(tx.getCurrency())
+                    .description(tx.getDescription())
+                    .completedAt(now)
+                    .build());
         } else {
             // Set status to FAILED and persist BEFORE calling the compensation REST endpoint.
             // If we crash between the credit() call and the save(FAILED), a redelivered CreditResult
@@ -130,6 +168,17 @@ public class AccountResultConsumer {
             } catch (Exception e) {
                 log.error("CRITICAL: Compensation FAILED for transaction {}! Manual intervention required.", tx.getId(), e);
             }
+            sagaEventProducer.publishTransactionFailed(TransactionFailedEvent.builder()
+                    .transactionId(tx.getId())
+                    .fromAccountId(tx.getFromAccountId())
+                    .toAccountId(tx.getToAccountId())
+                    .senderUserId(tx.getInitiatedByUserId())
+                    .amount(tx.getAmount())
+                    .currency(tx.getCurrency())
+                    .description(tx.getDescription())
+                    .reason(event.getErrorMessage())
+                    .failedAt(LocalDateTime.now())
+                    .build());
         }
     }
 }

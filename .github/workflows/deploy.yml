@@ -46,7 +46,7 @@ jobs:
       - run: echo "CI succeeded — proceeding with deployment."
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Build & push Docker images to GHCR (all 5 services in parallel)
+  # Build & push Docker images to GHCR (all services in parallel)
   # ─────────────────────────────────────────────────────────────────────────
   build-push:
     name: Build & Push — ${{ matrix.service }}
@@ -64,6 +64,8 @@ jobs:
             dir: services/transaction-service
           - service: messaging-service
             dir: services/messaging-service
+          - service: notification-service
+            dir: services/notification-service
           - service: api-gateway
             dir: services/api-gateway
           - service: frontend

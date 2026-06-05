@@ -52,6 +52,18 @@ public class AccountClient {
                 .body(AccountResponse.class);
     }
 
+    /**
+     * Fetches account metadata using the internal secret (no user ownership check).
+     * Used by the notification event publisher to resolve the recipient's userId from
+     * their accountId at saga completion — without requiring the recipient's session token.
+     */
+    public AccountResponse getAccountInternal(UUID accountId) {
+        return restClient.get()
+                .uri("/api/v1/accounts/{id}/internal", accountId)
+                .retrieve()
+                .body(AccountResponse.class);
+    }
+
     public void debit(UUID accountId, UUID userId, BigDecimal amount) {
         restClient.post()
                 .uri("/api/v1/accounts/{id}/debit", accountId)

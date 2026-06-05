@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.solarisbank.transaction_service.kafka.config.KafkaTopicConfig;
 import com.solarisbank.transaction_service.kafka.event.CreditRequestedEvent;
 import com.solarisbank.transaction_service.kafka.event.DebitRequestedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionCompletedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionFailedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -26,6 +28,16 @@ public class SagaEventProducer {
     public void publishCreditRequest(CreditRequestedEvent event) {
         send(KafkaTopicConfig.TOPIC_CREDIT_REQUESTED, event.getTransactionId().toString(), event);
         log.info("Published CreditRequestedEvent for transaction {}", event.getTransactionId());
+    }
+
+    public void publishTransactionCompleted(TransactionCompletedEvent event) {
+        send(KafkaTopicConfig.TOPIC_TRANSACTION_COMPLETED, event.getTransactionId().toString(), event);
+        log.info("Published TransactionCompletedEvent for transaction {}", event.getTransactionId());
+    }
+
+    public void publishTransactionFailed(TransactionFailedEvent event) {
+        send(KafkaTopicConfig.TOPIC_TRANSACTION_FAILED, event.getTransactionId().toString(), event);
+        log.info("Published TransactionFailedEvent for transaction {}", event.getTransactionId());
     }
 
     private void send(String topic, String key, Object payload) {

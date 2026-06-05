@@ -32,6 +32,9 @@ public class ProxyController {
     @Value("${messaging.service.url:http://localhost:8084}")
     private String messagingServiceUrl;
 
+    @Value("${notification.service.url:http://localhost:8085}")
+    private String notificationServiceUrl;
+
     @RequestMapping("/api/v1/auth/**")
     public ResponseEntity<byte[]> proxyAuth(
             HttpServletRequest request,
@@ -116,6 +119,13 @@ public class ProxyController {
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
         return forward(request, body, transactionServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/notifications/**")
+    public ResponseEntity<byte[]> proxyNotifications(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, notificationServiceUrl);
     }
 
     private ResponseEntity<byte[]> forward(HttpServletRequest request, byte[] body, String targetBase) {

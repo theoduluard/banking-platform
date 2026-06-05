@@ -65,6 +65,17 @@ public class AccountService {
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * Returns account metadata without an ownership check.
+     * Must only be called from endpoints secured by {@code X-Internal-Secret}.
+     * Used by transaction-service to resolve the recipient's userId for notification events.
+     */
+    public AccountResponse getAccountInternal(UUID accountId) {
+        return accountRepository.findById(accountId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));
+    }
+
     public AccountResponse updateStatus(UUID accountId, UUID userId, Account.Status newStatus) {
         Account account = accountRepository.findByAccountIdAndUserId(accountId, userId)
                 .orElseThrow(() -> new BusinessException("Account not found", HttpStatus.NOT_FOUND));

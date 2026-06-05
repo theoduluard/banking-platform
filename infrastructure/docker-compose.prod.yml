@@ -119,14 +119,22 @@ services:
       JWT_REFRESH_EXPIRATION:        ${JWT_REFRESH_EXPIRATION}
       ADMIN_EMAIL:                   ${ADMIN_EMAIL}
       ADMIN_PASSWORD:                ${ADMIN_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
+      # Flyway — explicit overrides so these settings can never be accidentally
+      # disabled by a stale env var in the .env file or the host environment.
+      # repair-on-migrate: removes FAILED entries from flyway_schema_history before
+      #   retrying, which self-heals a deployment that crashed mid-migration.
+      # validate-on-migrate: disabled to tolerate IF-NOT-EXISTS rewrites to V1 SQL
+      #   that change the checksum without changing the effective schema.
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
       # SMTP — Brevo by default (override with any SMTP provider)
-      SMTP_HOST:                     ${SMTP_HOST:-smtp-relay.brevo.com}
-      SMTP_PORT:                     ${SMTP_PORT:-587}
-      SMTP_USERNAME:                 ${SMTP_USERNAME:-}
-      SMTP_PASSWORD:                 ${SMTP_PASSWORD:-}
-      SMTP_FROM:                     ${SMTP_FROM:-noreply@solarisbank.demo}
-      FRONTEND_URL:                  ${FRONTEND_URL:-http://localhost:5173}
+      SMTP_HOST:                          ${SMTP_HOST:-smtp-relay.brevo.com}
+      SMTP_PORT:                          ${SMTP_PORT:-587}
+      SMTP_USERNAME:                      ${SMTP_USERNAME:-}
+      SMTP_PASSWORD:                      ${SMTP_PASSWORD:-}
+      SMTP_FROM:                          ${SMTP_FROM:-noreply@solarisbank.demo}
+      FRONTEND_URL:                       ${FRONTEND_URL:-http://localhost:5173}
     networks:
       - banking-net
 
@@ -143,10 +151,12 @@ services:
       SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-accounts:5432/accounts_db
       SPRING_DATASOURCE_USERNAME:    solaris
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET:                    ${JWT_SECRET}
-      INTERNAL_SECRET:               ${INTERNAL_SECRET}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_KAFKA_BOOTSTRAP_SERVERS:     kafka:9092
+      JWT_SECRET:                         ${JWT_SECRET}
+      INTERNAL_SECRET:                    ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
     networks:
       - banking-net
 
@@ -163,10 +173,12 @@ services:
       SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-transactions:5432/transactions_db
       SPRING_DATASOURCE_USERNAME:    solaris
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      ACCOUNT_SERVICE_URL:           http://account-service:8082
-      INTERNAL_SECRET:               ${INTERNAL_SECRET}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_KAFKA_BOOTSTRAP_SERVERS:     kafka:9092
+      ACCOUNT_SERVICE_URL:               http://account-service:8082
+      INTERNAL_SECRET:                   ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO:     validate
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE:   "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
     networks:
       - banking-net
 
@@ -207,6 +219,45 @@ services:
     networks:
       - banking-net
 
+  postgres-notifications:
+    image: postgres:16
+    container_name: postgres-notifications
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       notifications_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-notifications-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d notifications_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  notification-service:
+    image: ghcr.io/theoduluard/banking-platform/notification-service:latest
+    container_name: notification-service
+    restart: unless-stopped
+    depends_on:
+      postgres-notifications:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:              jdbc:postgresql://postgres-notifications:5432/notifications_db
+      SPRING_DATASOURCE_USERNAME:         solaris
+      SPRING_DATASOURCE_PASSWORD:         ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS:     kafka:9092
+      INTERNAL_SECRET:                    ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
+    networks:
+      - banking-net
+
   api-gateway:
     image: ghcr.io/theoduluard/banking-platform/api-gateway:latest
     container_name: api-gateway
@@ -216,13 +267,15 @@ services:
       - account-service
       - transaction-service
       - messaging-service
+      - notification-service
     environment:
-      JWT_SECRET:              ${JWT_SECRET}
-      AUTH_SERVICE_URL:        http://auth-service:8081
-      ACCOUNT_SERVICE_URL:     http://account-service:8082
-      TRANSACTION_SERVICE_URL: http://transaction-service:8083
-      MESSAGING_SERVICE_URL:   http://messaging-service:8084
-      FRONTEND_URL:            ${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
+      JWT_SECRET:                ${JWT_SECRET}
+      AUTH_SERVICE_URL:          http://auth-service:8081
+      ACCOUNT_SERVICE_URL:       http://account-service:8082
+      TRANSACTION_SERVICE_URL:   http://transaction-service:8083
+      MESSAGING_SERVICE_URL:     http://messaging-service:8084
+      NOTIFICATION_SERVICE_URL:  http://notification-service:8085
+      FRONTEND_URL:              ${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
     # Not exposed externally — nginx handles all incoming traffic
     networks:
       - banking-net
@@ -303,6 +356,7 @@ volumes:
   postgres-accounts-data:
   postgres-transactions-data:
   postgres-messaging-data:
+  postgres-notifications-data:
   kafka-data:
   prometheus-data:
   grafana-data:
