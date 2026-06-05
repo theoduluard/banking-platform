@@ -51,6 +51,21 @@ class JwtServiceTest {
         assertThat(jwtService.extractUserId(token)).isEqualTo(userId);
     }
 
+    // ── extractRole ───────────────────────────────────────────────────────────
+
+    @Test
+    void extractRole_shouldReturnRole_fromValidToken() {
+        String token = Jwts.builder()
+                .subject(email)
+                .claim("userId", userId)
+                .claim("role", "CLIENT")
+                .expiration(new Date(System.currentTimeMillis() + 3_600_000L))
+                .signWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET)))
+                .compact();
+
+        assertThat(jwtService.extractRole(token)).isEqualTo("CLIENT");
+    }
+
     // ── isTokenValid ───────────────────────────────────────────────────────────
 
     @Test

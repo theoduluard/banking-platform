@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.util.UUID;
 
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -37,10 +38,11 @@ class ProxyControllerTest {
 
         // Injecter le RestClient et les URLs de test dans le contrôleur via réflexion
         ProxyController controller = new ProxyController();
-        ReflectionTestUtils.setField(controller, "restClient",          testClient);
-        ReflectionTestUtils.setField(controller, "authServiceUrl",       "http://localhost:8081");
-        ReflectionTestUtils.setField(controller, "accountServiceUrl",    "http://localhost:8082");
-        ReflectionTestUtils.setField(controller, "transactionServiceUrl","http://localhost:8083");
+        ReflectionTestUtils.setField(controller, "restClient",           testClient);
+        ReflectionTestUtils.setField(controller, "authServiceUrl",        "http://localhost:8081");
+        ReflectionTestUtils.setField(controller, "accountServiceUrl",     "http://localhost:8082");
+        ReflectionTestUtils.setField(controller, "transactionServiceUrl", "http://localhost:8083");
+        ReflectionTestUtils.setField(controller, "messagingServiceUrl",   "http://localhost:8084");
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
@@ -200,6 +202,175 @@ class ProxyControllerTest {
         mockMvc.perform(get("/api/v1/accounts")
                         .header("X-User-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    // ── Proxy → account-service (beneficiaries) ───────────────────────────────
+
+    @Test
+    void proxyBeneficiaries_shouldForwardGet_toAccountService() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/beneficiaries"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/beneficiaries")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    // ── Proxy → transaction-service (scheduled-transfers) ────────────────────
+
+    @Test
+    void proxyScheduledTransfers_shouldForwardGet_toTransactionService() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8083/api/v1/scheduled-transfers"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/scheduled-transfers")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    // ── Proxy → messaging-service (messages & requests) ─────────────────────
+
+    @Test
+    void proxyMessages_shouldForwardGet_toMessagingService() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8084/api/v1/messages"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/messages")
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    @Test
+    void proxyRequests_shouldForwardPost_toMessagingService() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8084/api/v1/requests"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.CREATED)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"id\":\"abc-123\",\"status\":\"OPEN\"}"));
+
+        mockMvc.perform(post("/api/v1/requests")
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"OTHER\",\"subject\":\"Problème\",\"body\":\"Corps.\"}"))
+                .andExpect(status().isCreated());
+
+        mockServer.verify();
+    }
+
+    // ── Proxy → admin routes ───────────────────────────────────────────────────
+
+    @Test
+    void proxyAdminUsers_shouldForwardGet_toAuthService() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8081/api/v1/admin/users"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    @Test
+    void proxyAdminAccounts_shouldForwardGet_toAccountService() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/admin/accounts"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"content\":[]}", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/admin/accounts")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    @Test
+    void proxyAdminMessages_shouldForwardGet_toMessagingService() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8084/api/v1/admin/messages"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/admin/messages")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    @Test
+    void proxyAdminRequests_shouldForwardGet_toMessagingService() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8084/api/v1/admin/requests"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/admin/requests")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    @Test
+    void proxyAdminTransactions_shouldForwardGet_toTransactionService() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8083/api/v1/admin/transactions"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"content\":[]}", MediaType.APPLICATION_JSON));
+
+        mockMvc.perform(get("/api/v1/admin/transactions")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isOk());
+
+        mockServer.verify();
+    }
+
+    // ── Proxy error handling — 502 ────────────────────────────────────────────
+
+    @Test
+    void proxy_shouldReturn502_whenDownstreamIsUnreachable() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/accounts"))
+                .andRespond(withException(new IOException("Connection refused")));
+
+        mockMvc.perform(get("/api/v1/accounts")
+                        .header("X-User-Id", UUID.randomUUID().toString()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.status").value(502));
+
+        mockServer.verify();
+    }
+
+    // ── Proxy — 204 No Content ────────────────────────────────────────────────
+
+    @Test
+    void proxy_shouldReturn204_whenDownstreamReturnsNoContent() throws Exception {
+        UUID accountId = UUID.randomUUID();
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/accounts/" + accountId + "/close"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+
+        mockMvc.perform(post("/api/v1/accounts/{id}/close", accountId)
+                        .header("X-User-Id", UUID.randomUUID().toString()))
+                .andExpect(status().isNoContent());
 
         mockServer.verify();
     }
