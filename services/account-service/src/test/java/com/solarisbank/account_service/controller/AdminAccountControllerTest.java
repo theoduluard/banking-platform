@@ -48,11 +48,13 @@ class AdminAccountControllerTest {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private UUID accountId;
+    private UUID adminUserId;
     private AccountResponse activeAccountResponse;
 
     @BeforeEach
     void setUp() {
-        accountId = UUID.randomUUID();
+        accountId   = UUID.randomUUID();
+        adminUserId = UUID.randomUUID();
 
         activeAccountResponse = AccountResponse.builder()
                 .id(accountId)
@@ -73,6 +75,7 @@ class AdminAccountControllerTest {
         when(accountService.getPendingAccounts()).thenReturn(List.of(activeAccountResponse));
 
         mockMvc.perform(get("/api/v1/admin/accounts/pending")
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(accountId.toString()));
@@ -81,6 +84,7 @@ class AdminAccountControllerTest {
     @Test
     void getPendingAccounts_shouldReturn403_whenNotAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/admin/accounts/pending")
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "CLIENT"))
                 .andExpect(status().isForbidden());
 
@@ -94,6 +98,7 @@ class AdminAccountControllerTest {
         when(accountService.approveAccount(accountId)).thenReturn(activeAccountResponse);
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/approve", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(accountId.toString()));
@@ -105,6 +110,7 @@ class AdminAccountControllerTest {
                 .thenThrow(new BusinessException("Account not found", HttpStatus.NOT_FOUND));
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/approve", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isNotFound());
     }
@@ -125,6 +131,7 @@ class AdminAccountControllerTest {
         when(accountService.rejectAccount(accountId)).thenReturn(rejectedResponse);
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/reject", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
@@ -141,6 +148,7 @@ class AdminAccountControllerTest {
         request.setAmount(new BigDecimal("100.00"));
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/deposit", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -154,6 +162,7 @@ class AdminAccountControllerTest {
         request.setAmount(BigDecimal.ZERO);
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/deposit", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -168,6 +177,7 @@ class AdminAccountControllerTest {
         // amount intentionally left null
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/deposit", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -185,6 +195,7 @@ class AdminAccountControllerTest {
         request.setAmount(new BigDecimal("50.00"));
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/withdrawal", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -197,6 +208,7 @@ class AdminAccountControllerTest {
         request.setAmount(new BigDecimal("-10.00"));
 
         mockMvc.perform(post("/api/v1/admin/accounts/{id}/withdrawal", accountId)
+                        .header("X-User-Id", adminUserId.toString())
                         .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))

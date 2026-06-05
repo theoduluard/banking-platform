@@ -5,11 +5,13 @@ import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,22 +23,53 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdminController {
 
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final UserRepository userRepository;
 
     // ── GET /api/v1/admin/users ────────────────────────────────────────────────
 
     @GetMapping("/users")
-    public ResponseEntity<List<UserAdminResponse>> getAllUsers(
-            @RequestHeader("X-User-Role") String userRole) {
+    public ResponseEntity<Page<UserAdminResponse>> getAllUsers(
+            @RequestHeader("X-User-Role")               String userRole,
+            @RequestParam(defaultValue = "0")    int    page,
+            @RequestParam(defaultValue = "50")   int    size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc")  String sortDir,
+            @RequestParam(required = false)      String search,
+            @RequestParam(required = false)      String role,
+            @RequestParam(required = false)      String status) {
 
         requireAdmin(userRole);
 
-        List<UserAdminResponse> users = userRepository.findAll()
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        // Map frontend sort key → entity field name
+        String sortField = switch (sortBy) {
+            case "email" -> "email";
+            case "date"  -> "createdAt";
+            default      -> "lastname";   // "name" or unknown → lastname
+        };
 
-        return ResponseEntity.ok(users);
+        Sort sort = sortDir.equalsIgnoreCase("desc")
+                ? Sort.by(sortField).descending()
+                : Sort.by(sortField).ascending();
+
+        PageRequest pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE), sort);
+
+        User.Role roleEnum = (role != null && !"ALL".equals(role))
+                ? User.Role.valueOf(role) : null;
+
+        Boolean isActive = null;
+        if ("ACTIVE".equals(status))   isActive = true;
+        if ("INACTIVE".equals(status)) isActive = false;
+
+        // Treat blank search as no filter
+        String searchParam = (search != null && !search.isBlank()) ? search : null;
+
+        Page<UserAdminResponse> result = userRepository
+                .findWithFilters(searchParam, roleEnum, isActive, pageable)
+                .map(this::toResponse);
+
+        return ResponseEntity.ok(result);
     }
 
     // ── PATCH /api/v1/admin/users/{id}/status ─────────────────────────────────

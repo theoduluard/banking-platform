@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -61,14 +65,17 @@ class AdminControllerTest {
     // ── GET /api/v1/admin/users ────────────────────────────────────────────────
 
     @Test
-    void getAllUsers_shouldReturn200_withUserList() throws Exception {
-        when(userRepository.findAll()).thenReturn(List.of(activeClient));
+    void getAllUsers_shouldReturn200_withPagedUserList() throws Exception {
+        Page<User> usersPage = new PageImpl<>(List.of(activeClient));
+        when(userRepository.findWithFilters(isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(usersPage);
 
         mockMvc.perform(get("/api/v1/admin/users")
                         .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].userId").value(userId.toString()))
-                .andExpect(jsonPath("$[0].email").value("client@example.com"));
+                .andExpect(jsonPath("$.content[0].userId").value(userId.toString()))
+                .andExpect(jsonPath("$.content[0].email").value("client@example.com"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test

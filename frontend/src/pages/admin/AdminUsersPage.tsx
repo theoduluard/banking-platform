@@ -1,22 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
-import type { AdminUser } from '@/types'
+import type { AdminUser, Page } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Users, Search, UserCheck, UserX, ShieldCheck, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 50
 
-type SortKey   = 'name' | 'email' | 'date'
-type SortDir   = 'asc' | 'desc'
+type SortKey      = 'name' | 'email' | 'date'
+type SortDir      = 'asc' | 'desc'
 type RoleFilter   = 'ALL' | 'CLIENT' | 'ADMIN'
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
 
@@ -39,36 +39,52 @@ export default function AdminUsersPage() {
   const qc = useQueryClient()
 
   // ── Filtering & sorting state ──────────────────────────────────────────────
-  const [search,      setSearch]      = useState('')
-  const [debouncedQ,  setDebouncedQ]  = useState('')
-  const [roleFilter,  setRoleFilter]  = useState<RoleFilter>('ALL')
-  const [statusFilter,setStatusFilter]= useState<StatusFilter>('ALL')
-  const [sortKey,     setSortKey]     = useState<SortKey>('name')
-  const [sortDir,     setSortDir]     = useState<SortDir>('asc')
-  const [page,        setPage]        = useState(0)
+  const [search,       setSearch]       = useState('')
+  const [debouncedQ,   setDebouncedQ]   = useState('')
+  const [roleFilter,   setRoleFilter]   = useState<RoleFilter>('ALL')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [sortKey,      setSortKey]      = useState<SortKey>('name')
+  const [sortDir,      setSortDir]      = useState<SortDir>('asc')
+  const [page,         setPage]         = useState(0)
 
-  // Debounce search input (300 ms) — avoids re-rendering on every keystroke
+  // Debounce search input (300 ms) — avoids a request on every keystroke
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setDebouncedQ(search)
-      setPage(0) // reset to first page on new search
+      setPage(0)
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
 
-  // Reset to first page whenever a filter changes
+  // Reset to first page on any filter or sort change
   useEffect(() => { setPage(0) }, [roleFilter, statusFilter, sortKey, sortDir])
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-  const { data: users = [], isLoading } = useQuery<AdminUser[]>({
-    queryKey: ['admin', 'users'],
-    queryFn: () => api.get<AdminUser[]>('/api/v1/admin/users').then(r => r.data),
-    // Cache for 60 s — admin list changes rarely; this avoids re-fetching on
-    // every filter change which are all done client-side.
-    staleTime: 60_000,
+  // ── Data fetching — server-side pagination, filtering and sorting ──────────
+  const { data, isLoading } = useQuery<Page<AdminUser>>({
+    queryKey: ['admin', 'users', debouncedQ, roleFilter, statusFilter, sortKey, sortDir, page],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        page:    String(page),
+        size:    String(PAGE_SIZE),
+        sortBy:  sortKey,
+        sortDir,
+      })
+      if (debouncedQ)             params.set('search', debouncedQ)
+      if (roleFilter   !== 'ALL') params.set('role',   roleFilter)
+      if (statusFilter !== 'ALL') params.set('status', statusFilter)
+      return api.get<Page<AdminUser>>(`/api/v1/admin/users?${params}`).then(r => r.data)
+    },
+    staleTime: 30_000,
   })
+
+  const pageItems     = data?.content      ?? []
+  const totalElements = data?.totalElements ?? 0
+  const totalPages    = Math.max(1, data?.totalPages ?? 1)
+  const currentPage   = Math.min(page, totalPages - 1)
+
+  const hasFilters = Boolean(debouncedQ) || roleFilter !== 'ALL' || statusFilter !== 'ALL'
 
   const toggleStatus = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
@@ -80,53 +96,10 @@ export default function AdminUsersPage() {
     onError: () => toast.error('Impossible de mettre à jour le statut'),
   })
 
-  // ── Client-side filtering & sorting ───────────────────────────────────────
-  const filtered = useMemo(() => {
-    let result = users
-
-    // Text search
-    if (debouncedQ) {
-      const q = debouncedQ.toLowerCase()
-      result = result.filter(u =>
-        `${u.firstname} ${u.lastname} ${u.email}`.toLowerCase().includes(q)
-      )
-    }
-
-    // Role filter
-    if (roleFilter !== 'ALL') {
-      result = result.filter(u => u.role === roleFilter)
-    }
-
-    // Status filter
-    if (statusFilter === 'ACTIVE')   result = result.filter(u =>  u.isActive)
-    if (statusFilter === 'INACTIVE') result = result.filter(u => !u.isActive)
-
-    // Sorting
-    result = [...result].sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'name')  cmp = `${a.firstname} ${a.lastname}`.localeCompare(`${b.firstname} ${b.lastname}`, 'fr')
-      if (sortKey === 'email') cmp = a.email.localeCompare(b.email, 'fr')
-      if (sortKey === 'date')  cmp = (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-
-    return result
-  }, [users, debouncedQ, roleFilter, statusFilter, sortKey, sortDir])
-
-  // ── Pagination ─────────────────────────────────────────────────────────────
-  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const currentPage = Math.min(page, totalPages - 1)
-  const pageItems   = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
-
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
   }
-
-  // ── Summary counts ─────────────────────────────────────────────────────────
-  const activeCount  = users.filter(u =>  u.isActive).length
-  const inactiveCount= users.filter(u => !u.isActive).length
-  const adminCount   = users.filter(u =>  u.role === 'ADMIN').length
 
   return (
     <div className="space-y-6">
@@ -140,15 +113,10 @@ export default function AdminUsersPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Utilisateurs</h1>
             <p className="text-sm text-muted-foreground">
-              {users.length.toLocaleString('fr-FR')} compte{users.length > 1 ? 's' : ''} enregistré{users.length > 1 ? 's' : ''}
-              {' · '}
-              <span className="text-emerald-600">{activeCount} actif{activeCount > 1 ? 's' : ''}</span>
-              {inactiveCount > 0 && (
-                <span className="text-muted-foreground"> · {inactiveCount} inactif{inactiveCount > 1 ? 's' : ''}</span>
-              )}
-              {adminCount > 0 && (
-                <span className="text-primary"> · {adminCount} admin{adminCount > 1 ? 's' : ''}</span>
-              )}
+              {totalElements.toLocaleString('fr-FR')} compte{totalElements > 1 ? 's' : ''}{' '}
+              {hasFilters
+                ? 'correspondant aux filtres'
+                : 'enregistré' + (totalElements > 1 ? 's' : '')}
             </p>
           </div>
         </div>
@@ -212,16 +180,25 @@ export default function AdminUsersPage() {
         <CardHeader className="border-b pb-3 pt-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold">Liste des utilisateurs</CardTitle>
-            {filtered.length !== users.length && (
-              <span className="text-xs text-muted-foreground">
-                {filtered.length.toLocaleString('fr-FR')} résultat{filtered.length > 1 ? 's' : ''} sur {users.length.toLocaleString('fr-FR')}
-              </span>
+            {hasFilters && !isLoading && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {totalElements.toLocaleString('fr-FR')} résultat{totalElements > 1 ? 's' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setRoleFilter('ALL'); setStatusFilter('ALL') }}
+                  className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                  Réinitialiser
+                </button>
+              </div>
             )}
           </div>
         </CardHeader>
 
         {/* Column headers */}
-        {!isLoading && filtered.length > 0 && (
+        {!isLoading && pageItems.length > 0 && (
           <div className="hidden border-b bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid sm:grid-cols-[1fr_1fr_120px_80px_100px]">
             <button
               type="button"
@@ -256,11 +233,11 @@ export default function AdminUsersPage() {
             </div>
           )}
 
-          {!isLoading && filtered.length === 0 && (
+          {!isLoading && pageItems.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
               <Users size={28} className="opacity-40" />
               <p className="text-sm">Aucun utilisateur trouvé.</p>
-              {(debouncedQ || roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+              {hasFilters && (
                 <button
                   type="button"
                   onClick={() => { setSearch(''); setRoleFilter('ALL'); setStatusFilter('ALL') }}
@@ -293,7 +270,7 @@ export default function AdminUsersPage() {
                 <span>
                   Page {currentPage + 1} / {totalPages}
                   {' · '}
-                  {filtered.length.toLocaleString('fr-FR')} résultat{filtered.length > 1 ? 's' : ''}
+                  {totalElements.toLocaleString('fr-FR')} résultat{totalElements > 1 ? 's' : ''}
                 </span>
                 <div className="flex items-center gap-1">
                   {/* First page */}
@@ -307,7 +284,7 @@ export default function AdminUsersPage() {
                     ‹
                   </Button>
 
-                  {/* Page numbers — show up to 5 pages around current */}
+                  {/* Page numbers — up to 5 around current */}
                   {Array.from({ length: totalPages }, (_, i) => i)
                     .filter(i => Math.abs(i - currentPage) <= 2 || i === 0 || i === totalPages - 1)
                     .reduce<(number | '…')[]>((acc, i, idx, arr) => {
