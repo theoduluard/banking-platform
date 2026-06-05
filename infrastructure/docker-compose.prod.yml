@@ -222,6 +222,7 @@ services:
       ACCOUNT_SERVICE_URL:     http://account-service:8082
       TRANSACTION_SERVICE_URL: http://transaction-service:8083
       MESSAGING_SERVICE_URL:   http://messaging-service:8084
+      FRONTEND_URL:            ${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
     # Not exposed externally — nginx handles all incoming traffic
     networks:
       - banking-net
