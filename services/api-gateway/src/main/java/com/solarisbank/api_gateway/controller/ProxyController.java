@@ -35,6 +35,27 @@ public class ProxyController {
     @Value("${notification.service.url:http://localhost:8085}")
     private String notificationServiceUrl;
 
+    @Value("${card.service.url:http://localhost:8086}")
+    private String cardServiceUrl;
+
+    @Value("${analytics.service.url:http://localhost:8087}")
+    private String analyticsServiceUrl;
+
+    @Value("${loan.service.url:http://localhost:8088}")
+    private String loanServiceUrl;
+
+    @Value("${fraud.service.url:http://localhost:8089}")
+    private String fraudServiceUrl;
+
+    @Value("${currency.service.url:http://localhost:8090}")
+    private String currencyServiceUrl;
+
+    @Value("${audit.service.url:http://localhost:8091}")
+    private String auditServiceUrl;
+
+    @Value("${document.service.url:http://localhost:8092}")
+    private String documentServiceUrl;
+
     @RequestMapping("/api/v1/auth/**")
     public ResponseEntity<byte[]> proxyAuth(
             HttpServletRequest request,
@@ -126,6 +147,78 @@ public class ProxyController {
             HttpServletRequest request,
             @RequestBody(required = false) byte[] body) {
         return forward(request, body, notificationServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/cards/**")
+    public ResponseEntity<byte[]> proxyCards(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, cardServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/analytics/**")
+    public ResponseEntity<byte[]> proxyAnalytics(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, analyticsServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/loans/**")
+    public ResponseEntity<byte[]> proxyLoans(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, loanServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/fraud/**")
+    public ResponseEntity<byte[]> proxyFraud(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, fraudServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/currencies/**")
+    public ResponseEntity<byte[]> proxyCurrencies(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, currencyServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/audit/**")
+    public ResponseEntity<byte[]> proxyAudit(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, auditServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/documents/**")
+    public ResponseEntity<byte[]> proxyDocuments(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, documentServiceUrl);
+    }
+
+    // ── Admin routes for new services ─────────────────────────────────────────
+
+    @RequestMapping("/api/v1/admin/loans/**")
+    public ResponseEntity<byte[]> proxyAdminLoans(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, loanServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/fraud/**")
+    public ResponseEntity<byte[]> proxyAdminFraud(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, fraudServiceUrl);
+    }
+
+    @RequestMapping("/api/v1/admin/audit/**")
+    public ResponseEntity<byte[]> proxyAdminAudit(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) {
+        return forward(request, body, auditServiceUrl);
     }
 
     private ResponseEntity<byte[]> forward(HttpServletRequest request, byte[] body, String targetBase) {

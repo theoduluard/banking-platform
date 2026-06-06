@@ -24,6 +24,11 @@ import MessagesPage       from '@/pages/MessagesPage'
 import RequestsPage       from '@/pages/RequestsPage'
 import SettingsPage       from '@/pages/SettingsPage'
 import VerifyNewEmailPage from '@/pages/VerifyNewEmailPage'
+import CardsPage          from '@/pages/CardsPage'
+import LoansPage          from '@/pages/LoansPage'
+import CurrencyPage       from '@/pages/CurrencyPage'
+import AnalyticsPage      from '@/pages/AnalyticsPage'
+import DocumentsPage      from '@/pages/DocumentsPage'
 
 import AdminDashboardPage    from '@/pages/admin/AdminDashboardPage'
 import AdminUsersPage        from '@/pages/admin/AdminUsersPage'
@@ -69,6 +74,11 @@ export default function App() {
             <Route path="/messages"      element={<MessagesPage />} />
             <Route path="/requests"      element={<RequestsPage />} />
             <Route path="/settings"      element={<SettingsPage />} />
+            <Route path="/cards"         element={<CardsPage />} />
+            <Route path="/loans"         element={<LoansPage />} />
+            <Route path="/currency"      element={<CurrencyPage />} />
+            <Route path="/analytics"     element={<AnalyticsPage />} />
+            <Route path="/documents"     element={<DocumentsPage />} />
           </Route>
 
           {/* Admin — ADMIN role required, own sidebar layout */}

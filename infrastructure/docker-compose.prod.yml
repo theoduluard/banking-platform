@@ -264,6 +264,285 @@ services:
     networks:
       - banking-net
 
+  # ── New service databases ─────────────────────────────────────────────────
+
+  postgres-cards:
+    image: postgres:16
+    container_name: postgres-cards
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       cards_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-cards-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d cards_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-analytics:
+    image: postgres:16
+    container_name: postgres-analytics
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       analytics_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-analytics-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-loans:
+    image: postgres:16
+    container_name: postgres-loans
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       loans_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-loans-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d loans_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-fraud:
+    image: postgres:16
+    container_name: postgres-fraud
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       fraud_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-fraud-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d fraud_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-currency:
+    image: postgres:16
+    container_name: postgres-currency
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       currency_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-currency-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d currency_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-audit:
+    image: postgres:16
+    container_name: postgres-audit
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       audit_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-audit-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d audit_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  postgres-documents:
+    image: postgres:16
+    container_name: postgres-documents
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       documents_db
+      POSTGRES_USER:     solaris
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-documents-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solaris -d documents_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-net
+
+  # ── New application services ───────────────────────────────────────────────
+
+  card-service:
+    image: ghcr.io/theoduluard/banking-platform/card-service:latest
+    container_name: card-service
+    restart: unless-stopped
+    depends_on:
+      postgres-cards:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-cards:5432/cards_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  analytics-service:
+    image: ghcr.io/theoduluard/banking-platform/analytics-service:latest
+    container_name: analytics-service
+    restart: unless-stopped
+    depends_on:
+      postgres-analytics:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-analytics:5432/analytics_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  loan-service:
+    image: ghcr.io/theoduluard/banking-platform/loan-service:latest
+    container_name: loan-service
+    restart: unless-stopped
+    depends_on:
+      postgres-loans:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-loans:5432/loans_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  fraud-service:
+    image: ghcr.io/theoduluard/banking-platform/fraud-service:latest
+    container_name: fraud-service
+    restart: unless-stopped
+    depends_on:
+      postgres-fraud:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-fraud:5432/fraud_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  currency-service:
+    image: ghcr.io/theoduluard/banking-platform/currency-service:latest
+    container_name: currency-service
+    restart: unless-stopped
+    depends_on:
+      postgres-currency:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-currency:5432/currency_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  audit-service:
+    image: ghcr.io/theoduluard/banking-platform/audit-service:latest
+    container_name: audit-service
+    restart: unless-stopped
+    depends_on:
+      postgres-audit:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-audit:5432/audit_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
+  document-service:
+    image: ghcr.io/theoduluard/banking-platform/document-service:latest
+    container_name: document-service
+    restart: unless-stopped
+    depends_on:
+      postgres-documents:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres-documents:5432/documents_db
+      SPRING_DATASOURCE_USERNAME:    solaris
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
+      ACCOUNT_SERVICE_URL:           http://account-service:8082
+      INTERNAL_SECRET:               ${INTERNAL_SECRET}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED:         "true"
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+    networks:
+      - banking-net
+
   api-gateway:
     image: ghcr.io/theoduluard/banking-platform/api-gateway:latest
     container_name: api-gateway
@@ -274,6 +553,13 @@ services:
       - transaction-service
       - messaging-service
       - notification-service
+      - card-service
+      - analytics-service
+      - loan-service
+      - fraud-service
+      - currency-service
+      - audit-service
+      - document-service
     environment:
       JWT_SECRET:                ${JWT_SECRET}
       AUTH_SERVICE_URL:          http://auth-service:8081
@@ -281,6 +567,13 @@ services:
       TRANSACTION_SERVICE_URL:   http://transaction-service:8083
       MESSAGING_SERVICE_URL:     http://messaging-service:8084
       NOTIFICATION_SERVICE_URL:  http://notification-service:8085
+      CARD_SERVICE_URL:          http://card-service:8086
+      ANALYTICS_SERVICE_URL:     http://analytics-service:8087
+      LOAN_SERVICE_URL:          http://loan-service:8088
+      FRAUD_SERVICE_URL:         http://fraud-service:8089
+      CURRENCY_SERVICE_URL:      http://currency-service:8090
+      AUDIT_SERVICE_URL:         http://audit-service:8091
+      DOCUMENT_SERVICE_URL:      http://document-service:8092
       FRONTEND_URL:              ${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
     # Not exposed externally — nginx handles all incoming traffic
     networks:
@@ -363,6 +656,13 @@ volumes:
   postgres-transactions-data:
   postgres-messaging-data:
   postgres-notifications-data:
+  postgres-cards-data:
+  postgres-analytics-data:
+  postgres-loans-data:
+  postgres-fraud-data:
+  postgres-currency-data:
+  postgres-audit-data:
+  postgres-documents-data:
   kafka-data:
   prometheus-data:
   grafana-data:

@@ -66,6 +66,20 @@ jobs:
             dir: services/messaging-service
           - service: notification-service
             dir: services/notification-service
+          - service: card-service
+            dir: services/card-service
+          - service: analytics-service
+            dir: services/analytics-service
+          - service: loan-service
+            dir: services/loan-service
+          - service: fraud-service
+            dir: services/fraud-service
+          - service: currency-service
+            dir: services/currency-service
+          - service: audit-service
+            dir: services/audit-service
+          - service: document-service
+            dir: services/document-service
           - service: api-gateway
             dir: services/api-gateway
           - service: frontend

@@ -4,7 +4,7 @@ import { removeToken, getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import axios from 'axios'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare, Settings } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare, Settings, CreditCard, TrendingUp, Calculator, BarChart3, FileDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from './Logo'
 
@@ -13,6 +13,11 @@ const navLinks = [
   { to: '/transfer',             label: 'Virement',           icon: ArrowLeftRight },
   { to: '/scheduled-transfers',  label: 'Programmés',          icon: CalendarClock },
   { to: '/beneficiaries',        label: 'Bénéficiaires',       icon: Users },
+  { to: '/cards',                label: 'Cartes',             icon: CreditCard },
+  { to: '/loans',                label: 'Prêts',              icon: Calculator },
+  { to: '/analytics',            label: 'Analyses',           icon: BarChart3 },
+  { to: '/currency',             label: 'Devises',            icon: TrendingUp },
+  { to: '/documents',            label: 'Documents',          icon: FileDown },
   { to: '/messages',        label: 'Messages',          icon: Bell },
   { to: '/requests',        label: 'Demandes',          icon: MessageSquare },
   { to: '/accounts/new',    label: 'Nouveau compte',   icon: PlusCircle },

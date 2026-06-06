@@ -29,3 +29,43 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['messaging-service:8084']
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['notification-service:8085']
+
+  - job_name: 'card-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['card-service:8086']
+
+  - job_name: 'analytics-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['analytics-service:8087']
+
+  - job_name: 'loan-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['loan-service:8088']
+
+  - job_name: 'fraud-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['fraud-service:8089']
+
+  - job_name: 'currency-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['currency-service:8090']
+
+  - job_name: 'audit-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['audit-service:8091']
+
+  - job_name: 'document-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['document-service:8092']
