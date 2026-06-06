@@ -147,45 +147,60 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER,JWT_SECRET,INTERNAL_SECRET,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL
+          envs: GHCR_TOKEN,REPO_OWNER,DB_PASSWORD,JWT_SECRET,JWT_EXPIRATION,JWT_REFRESH_EXPIRATION,INTERNAL_SECRET,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL
           script: |
             set -e
 
             # Authenticate to GHCR so private images can be pulled
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$REPO_OWNER" --password-stdin
 
-            # Pull latest images (retry up to 3 times for transient GHCR errors)
             cd "${{ secrets.NAS_DEPLOY_PATH }}"
+
+            # Regenerate .env from GitHub secrets so manual docker compose
+            # commands on the NAS always work without maintaining the file by hand.
+            cat > .env << ENV
+DB_PASSWORD=${DB_PASSWORD}
+JWT_SECRET=${JWT_SECRET}
+JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
+ADMIN_EMAIL=${ADMIN_EMAIL}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+INTERNAL_SECRET=${INTERNAL_SECRET}
+GRAFANA_PASSWORD=${GRAFANA_PASSWORD:-admin}
+GRAFANA_PUBLIC_URL=${GRAFANA_PUBLIC_URL:-http://localhost:3000}
+SMTP_USERNAME=${SMTP_USERNAME}
+SMTP_PASSWORD=${SMTP_PASSWORD}
+SMTP_FROM=${SMTP_FROM:-noreply@solarisbank.demo}
+FRONTEND_URL=${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
+ENV
+            chmod 600 .env
+
+            # Pull latest images (retry up to 3 times for transient GHCR errors)
             for i in 1 2 3; do
               docker compose -f docker-compose.prod.yml pull && break
               echo "Pull attempt $i failed, retrying in 15s…"
               sleep 15
             done
-            JWT_SECRET="$JWT_SECRET" \
-            INTERNAL_SECRET="$INTERNAL_SECRET" \
-            ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-            GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}" \
-            GRAFANA_PUBLIC_URL="${GRAFANA_PUBLIC_URL:-http://localhost:3000}" \
-            SMTP_USERNAME="$SMTP_USERNAME" \
-            SMTP_PASSWORD="$SMTP_PASSWORD" \
-            SMTP_FROM="${SMTP_FROM:-noreply@solarisbank.demo}" \
-            FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}" \
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            # .env has just been regenerated above — docker compose reads it automatically
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans --force-recreate
 
             # Remove dangling images to save disk space
             docker image prune -f
 
             echo "Deployment complete."
         env:
-          GHCR_TOKEN:           ${{ secrets.GHCR_TOKEN }}
-          REPO_OWNER:           ${{ github.repository_owner }}
-          JWT_SECRET:           ${{ secrets.JWT_SECRET }}
-          INTERNAL_SECRET:      ${{ secrets.INTERNAL_SECRET }}
-          ADMIN_EMAIL:          ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD:       ${{ secrets.ADMIN_PASSWORD }}
-          GRAFANA_PASSWORD:     ${{ secrets.GRAFANA_PASSWORD }}
-          GRAFANA_PUBLIC_URL:   ${{ secrets.GRAFANA_PUBLIC_URL }}
-          SMTP_USERNAME:        ${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD:        ${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM:            ${{ secrets.SMTP_FROM }}
-          FRONTEND_URL:         ${{ secrets.FRONTEND_URL }}
+          GHCR_TOKEN:              ${{ secrets.GHCR_TOKEN }}
+          REPO_OWNER:              ${{ github.repository_owner }}
+          DB_PASSWORD:             ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET:              ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRATION:          ${{ secrets.JWT_EXPIRATION }}
+          JWT_REFRESH_EXPIRATION:  ${{ secrets.JWT_REFRESH_EXPIRATION }}
+          INTERNAL_SECRET:         ${{ secrets.INTERNAL_SECRET }}
+          ADMIN_EMAIL:             ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD:          ${{ secrets.ADMIN_PASSWORD }}
+          GRAFANA_PASSWORD:        ${{ secrets.GRAFANA_PASSWORD }}
+          GRAFANA_PUBLIC_URL:      ${{ secrets.GRAFANA_PUBLIC_URL }}
+          SMTP_USERNAME:           ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD:           ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM:               ${{ secrets.SMTP_FROM }}
+          FRONTEND_URL:            ${{ secrets.FRONTEND_URL }}
