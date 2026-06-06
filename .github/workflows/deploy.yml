@@ -159,20 +159,20 @@ jobs:
             # Regenerate .env from GitHub secrets so manual docker compose
             # commands on the NAS always work without maintaining the file by hand.
             cat > .env << ENV
-DB_PASSWORD=${DB_PASSWORD}
-JWT_SECRET=${JWT_SECRET}
-JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
-JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
-ADMIN_EMAIL=${ADMIN_EMAIL}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-INTERNAL_SECRET=${INTERNAL_SECRET}
-GRAFANA_PASSWORD=${GRAFANA_PASSWORD:-admin}
-GRAFANA_PUBLIC_URL=${GRAFANA_PUBLIC_URL:-http://localhost:3000}
-SMTP_USERNAME=${SMTP_USERNAME}
-SMTP_PASSWORD=${SMTP_PASSWORD}
-SMTP_FROM=${SMTP_FROM:-noreply@solarisbank.demo}
-FRONTEND_URL=${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
-ENV
+            DB_PASSWORD=${DB_PASSWORD}
+            JWT_SECRET=${JWT_SECRET}
+            JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+            JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
+            ADMIN_EMAIL=${ADMIN_EMAIL}
+            ADMIN_PASSWORD=${ADMIN_PASSWORD}
+            INTERNAL_SECRET=${INTERNAL_SECRET}
+            GRAFANA_PASSWORD=${GRAFANA_PASSWORD:-admin}
+            GRAFANA_PUBLIC_URL=${GRAFANA_PUBLIC_URL:-http://localhost:3000}
+            SMTP_USERNAME=${SMTP_USERNAME}
+            SMTP_PASSWORD=${SMTP_PASSWORD}
+            SMTP_FROM=${SMTP_FROM:-noreply@solarisbank.demo}
+            FRONTEND_URL=${FRONTEND_URL:-https://solaris-bank.theoduluard.fr}
+            ENV
             chmod 600 .env
 
             # Pull latest images (retry up to 3 times for transient GHCR errors)
