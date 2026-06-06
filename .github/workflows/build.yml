@@ -906,6 +906,48 @@ jobs:
           name: notification-service-coverage
           path: .github/coverage/notification-service
 
+      - name: Download card-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: card-service-coverage
+          path: .github/coverage/card-service
+
+      - name: Download analytics-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: analytics-service-coverage
+          path: .github/coverage/analytics-service
+
+      - name: Download loan-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: loan-service-coverage
+          path: .github/coverage/loan-service
+
+      - name: Download fraud-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: fraud-service-coverage
+          path: .github/coverage/fraud-service
+
+      - name: Download currency-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: currency-service-coverage
+          path: .github/coverage/currency-service
+
+      - name: Download audit-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: audit-service-coverage
+          path: .github/coverage/audit-service
+
+      - name: Download document-service coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: document-service-coverage
+          path: .github/coverage/document-service
+
       # ── Generate SVG badges ──────────────────────────────────
       - name: Badge — auth-service
         uses: cicirello/jacoco-badge-generator@v2
@@ -952,6 +994,62 @@ jobs:
         with:
           jacoco-csv-file: .github/coverage/notification-service/jacoco.csv
           badges-directory: .github/badges/notification-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — card-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/card-service/jacoco.csv
+          badges-directory: .github/badges/card-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — analytics-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/analytics-service/jacoco.csv
+          badges-directory: .github/badges/analytics-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — loan-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/loan-service/jacoco.csv
+          badges-directory: .github/badges/loan-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — fraud-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/fraud-service/jacoco.csv
+          badges-directory: .github/badges/fraud-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — currency-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/currency-service/jacoco.csv
+          badges-directory: .github/badges/currency-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — audit-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/audit-service/jacoco.csv
+          badges-directory: .github/badges/audit-service
+          coverage-badge-filename: coverage.svg
+          generate-branches-badge: false
+
+      - name: Badge — document-service
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: .github/coverage/document-service/jacoco.csv
+          badges-directory: .github/badges/document-service
           coverage-badge-filename: coverage.svg
           generate-branches-badge: false
 
