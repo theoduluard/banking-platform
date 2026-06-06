@@ -638,21 +638,6 @@ jobs:
     permissions:
       contents: read
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: currency_db
-          POSTGRES_USER: solaris
-          POSTGRES_PASSWORD: solaris123
-        ports:
-          - 5442:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -765,21 +750,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: documents_db
-          POSTGRES_USER: solaris
-          POSTGRES_PASSWORD: solaris123
-        ports:
-          - 5444:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout
