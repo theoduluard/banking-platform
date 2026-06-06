@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.analytics_service.model.SpendingAggregate;
 import com.solarisbank.analytics_service.repository.SpendingAggregateRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,15 +16,19 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class TransactionEventConsumer {
 
     private final SpendingAggregateRepository repo;
-    // Instantiated directly — Spring Boot 4 auto-configures tools.jackson (Jackson 3.x)
-    // as its default ObjectMapper bean; injecting com.fasterxml.jackson ObjectMapper
-    // via constructor would require an explicit @Bean, so we create it inline instead.
-    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    // ObjectMapper created directly — Spring Boot 4 registers tools.jackson (Jackson 3.x)
+    // as its ObjectMapper bean, not com.fasterxml.jackson, so constructor injection fails.
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public TransactionEventConsumer(SpendingAggregateRepository repo) {
+        this.repo = repo;
+        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
 
     @KafkaListener(topics = "transaction-events", groupId = "analytics-service")
     @Transactional

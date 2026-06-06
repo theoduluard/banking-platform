@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.fraud_service.model.FraudAlert;
 import com.solarisbank.fraud_service.repository.FraudAlertRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,17 +16,21 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class TransactionFraudConsumer {
 
     private static final BigDecimal HIGH_AMOUNT_THRESHOLD = new BigDecimal("10000");
 
     private final FraudAlertRepository repo;
-    // Instantiated directly — Spring Boot 4 auto-configures tools.jackson (Jackson 3.x)
-    // as its default ObjectMapper bean; com.fasterxml.jackson ObjectMapper is not
-    // registered, so constructor injection would fail. Create it inline instead.
-    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    // ObjectMapper created directly — Spring Boot 4 registers tools.jackson (Jackson 3.x)
+    // as its ObjectMapper bean, not com.fasterxml.jackson, so constructor injection fails.
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public TransactionFraudConsumer(FraudAlertRepository repo) {
+        this.repo = repo;
+        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
 
     @KafkaListener(topics = "transaction-events", groupId = "fraud-service")
     @Transactional
