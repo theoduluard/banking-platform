@@ -1,7 +1,7 @@
 # Solaris Bank — Banking Platform
 
 Plateforme bancaire complète construite sur une architecture microservices.
-Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et React.
+Projet d'apprentissage couvrant Spring Boot 4, Kafka (Saga pattern), JWT 2FA, RBAC et React 19.
 
 ---
 
@@ -14,6 +14,14 @@ Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et 
 | account-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/account-service/coverage.svg) |
 | transaction-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/transaction-service/coverage.svg) |
 | messaging-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/messaging-service/coverage.svg) |
+| notification-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/notification-service/coverage.svg) |
+| card-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/card-service/coverage.svg) |
+| analytics-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/analytics-service/coverage.svg) |
+| loan-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/loan-service/coverage.svg) |
+| fraud-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/fraud-service/coverage.svg) |
+| currency-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/currency-service/coverage.svg) |
+| audit-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/audit-service/coverage.svg) |
+| document-service | ![Build](https://github.com/theoduluard/banking-platform/actions/workflows/build.yml/badge.svg) | ![Coverage](https://raw.githubusercontent.com/theoduluard/banking-platform/main/.github/badges/document-service/coverage.svg) |
 
 ---
 
@@ -22,16 +30,15 @@ Projet d'apprentissage couvrant Spring Boot, Kafka (Saga pattern), JWT, RBAC et 
 - [Architecture](#architecture)
 - [Flux de virement — Saga Kafka](#flux-de-virement--saga-kafka)
 - [Sécurité](#sécurité)
-  - [Authentification & Autorisation](#authentification--autorisation)
+  - [Authentification 2FA](#authentification-2fa)
+  - [Rôles & Autorisation](#rôles--autorisation)
   - [Sécurité inter-services](#sécurité-inter-services)
-  - [Protection des routes admin](#protection-des-routes-admin-3-couches)
   - [Idempotence des transactions](#idempotence-des-transactions)
 - [Services](#services)
 - [Lancer le projet](#lancer-le-projet)
 - [API Reference](#api-reference)
 - [Structure du projet](#structure-du-projet)
 - [Stack technique](#stack-technique)
-- [Vérification email](#vérification-email)
 
 ---
 
@@ -42,70 +49,90 @@ graph TD
     USR(["👤 Navigateur"])
 
     subgraph FRONT["Frontend — :8080 (exposé)"]
-        NGINX["nginx\nSert la SPA · proxy /api/*"]
-        REACT["React 19 · Vite · Tailwind v4\nShadcn/ui · TanStack Query"]
+        NGINX["nginx · Sert la SPA · proxy /api/*"]
+        REACT["React 19 · Vite · Tailwind v4 · shadcn/ui"]
     end
 
-    subgraph GW["API Gateway — interne"]
-        FILTER["JwtGatewayFilter\nValide JWT_SECRET\nInjecte X-User-Id · X-User-Role\nBloque /admin si rôle ≠ ADMIN"]
-        PROXY["ProxyController\nRouting par préfixe"]
+    subgraph GW["API Gateway — :8080 (interne)"]
+        FILTER["JwtGatewayFilter\nValide JWT · Injecte X-User-Id + X-User-Role\nBloque /admin si role ≠ ADMIN"]
     end
 
-    subgraph SVC["Microservices"]
-        AUTH["auth-service :8081\nSigne JWT avec JWT_SECRET\nRegister · Login · BCrypt\nGestion utilisateurs admin"]
-        ACC["account-service :8082\nInternalRequestFilter\nComptes CHECKING / SAVINGS\nGénération IBAN · Solde"]
-        TX["transaction-service :8083\nInternalRequestFilter\nVirements · Clé idempotence\nSaga Kafka"]
-        MSG["messaging-service :8084\nInternalRequestFilter\nMessages · Support tickets\nNotifications Kafka"]
+    subgraph CORE["Services métier"]
+        AUTH["auth-service :8081\nRegister · Login 2FA (OTP)\nEmail verification · JWT · Admin users"]
+        ACC["account-service :8082\nComptes CHECKING / SAVINGS\nIBAN MOD-97 · Débit/Crédit Kafka"]
+        TX["transaction-service :8083\nVirements Saga · Idempotence\nStatuts PENDING→COMPLETED/FAILED"]
+        MSG["messaging-service :8084\nMessages · Support tickets"]
+        NOTIF["notification-service :8085\nNotifications in-app · Badge unread"]
+        CARD["card-service :8086\nCartes VIRTUAL/PHYSICAL\nFreeze · Limite de dépenses"]
+        ANA["analytics-service :8087\nAgrégats dépenses/revenus\npar mois et catégorie"]
+        LOAN["loan-service :8088\nSimulation · Demande de prêt\nÉchéancier mensuel"]
+        FRAUD["fraud-service :8089\nDétection temps réel (Kafka)\nRègles : montant élevé, structuration"]
+        CUR["currency-service :8090\nTaux de change · Conversion"]
+        AUDIT["audit-service :8091\nJournal immuable (Kafka)\nTransaction + auth events"]
+        DOC["document-service :8092\nGénération PDF (RIB)\nHistorique des documents"]
     end
 
-    subgraph KAFKA_LAYER["Messaging"]
-        KAFKA[["Apache Kafka\ndebit-requested · credit-requested\ndebit-result · credit-result\naccount.approved · account.rejected"]]
+    subgraph KAFKA_LAYER["Kafka topics"]
+        K[["transaction-events\nauth-events\ndebit-requested · credit-requested\ndebit-result · credit-result"]]
     end
 
-    subgraph DB["Bases de données — isolation par service"]
-        DB1[("postgres-auth\n:5433")]
-        DB2[("postgres-accounts\n:5434")]
-        DB3[("postgres-transactions\n:5435")]
-        DB4[("postgres-messaging\n:5436")]
+    subgraph DB["Bases de données — 1 par service"]
+        direction TB
+        DB1[("postgres-auth")]
+        DB2[("postgres-accounts")]
+        DB3[("postgres-transactions")]
+        DB4[("postgres-messaging")]
+        DB5[("postgres-notifications")]
+        DB6[("postgres-cards")]
+        DB7[("postgres-analytics")]
+        DB8[("postgres-loans")]
+        DB9[("postgres-fraud")]
+        DB10[("postgres-currency")]
+        DB11[("postgres-audit")]
+        DB12[("postgres-documents")]
     end
 
     USR -->|HTTPS| NGINX
     NGINX --> REACT
     NGINX -->|"/api/*"| FILTER
-    FILTER --> PROXY
+    FILTER --> AUTH & ACC & TX & MSG & NOTIF & CARD & ANA & LOAN & FRAUD & CUR & AUDIT & DOC
 
-    PROXY -->|"/api/v1/auth/**\n/api/v1/admin/users/**"| AUTH
-    PROXY -->|"/api/v1/accounts/**\n/api/v1/admin/accounts/**"| ACC
-    PROXY -->|"/api/v1/transactions/**\n/api/v1/admin/transactions/**"| TX
-    PROXY -->|"/api/v1/messages/**\n/api/v1/support/**"| MSG
+    TX -->|DebitRequestedEvent| K
+    K -->|DebitResultEvent| TX
+    K -->|CreditRequestedEvent| ACC
+    ACC -->|CreditResultEvent| K
 
-    TX -->|"X-Internal-Secret\nPOST /credit (compensation saga)"| ACC
-
-    TX -->|DebitRequestedEvent| KAFKA
-    KAFKA -->|DebitResultEvent| TX
-    KAFKA -->|CreditRequestedEvent| ACC
-    ACC -->|CreditResultEvent| KAFKA
-    KAFKA -->|"account.approved\naccount.rejected"| MSG
+    K -->|transaction-events| ANA
+    K -->|transaction-events| FRAUD
+    K -->|transaction-events\nauth-events| AUDIT
 
     AUTH --- DB1
     ACC --- DB2
     TX --- DB3
     MSG --- DB4
+    NOTIF --- DB5
+    CARD --- DB6
+    ANA --- DB7
+    LOAN --- DB8
+    FRAUD --- DB9
+    CUR --- DB10
+    AUDIT --- DB11
+    DOC --- DB12
 ```
 
 ### Principes d'architecture
 
-- **Un service = une responsabilité** — chaque service gère son propre domaine métier
-- **Une base de données par service** — pas de base partagée, pas de jointures cross-service
-- **Sécurité centralisée + défense en profondeur** — le gateway valide le JWT et injecte les headers ; chaque service les re-valide indépendamment via `InternalRequestFilter` (exige `X-User-Id` ou `X-Internal-Secret`)
-- **Stateless** — aucune session serveur, authentification uniquement par JWT
-- **Async par défaut** — les virements passent par Kafka (Saga pattern) pour la fiabilité et la résilience
+- **Un service = une responsabilité** — chaque service gère un domaine métier isolé
+- **Une base de données par service** — aucune jointure cross-service, aucune base partagée
+- **Défense en profondeur** — le gateway valide le JWT et injecte les headers ; chaque service backend les re-valide via `InternalRequestFilter`
+- **Stateless** — aucune session serveur, authentification uniquement par JWT court-lived (24h) + refresh token (7j)
+- **Event-driven** — analytics, fraude et audit consomment les événements Kafka de manière découplée, sans ralentir le chemin critique des virements
 
 ---
 
 ## Flux de virement — Saga Kafka
 
-Quand un utilisateur effectue un virement, la transaction passe par une saga orchestrée via Kafka. Le frontend reçoit immédiatement un `202 Accepted` avec le statut `PENDING`, puis le solde est mis à jour de manière asynchrone.
+Quand un utilisateur effectue un virement, la transaction passe par une saga orchestrée via Kafka. Le frontend reçoit immédiatement un `202 Accepted` avec le statut `PENDING`, puis le solde est mis à jour de manière asynchrone. En parallèle, `fraud-service` et `analytics-service` consomment le même événement Kafka.
 
 ```mermaid
 sequenceDiagram
@@ -115,10 +142,12 @@ sequenceDiagram
     participant TX as transaction-service
     participant K as Kafka
     participant ACC as account-service
+    participant FRAUD as fraud-service
+    participant ANA as analytics-service
+    participant AUDIT as audit-service
 
-    U->>FE: Confirme le virement (modale)
-    FE->>GW: POST /api/v1/transactions/transfer
-    Note over FE,GW: Header: Idempotency-Key: uuid
+    U->>FE: Confirme le virement
+    FE->>GW: POST /api/v1/transactions/transfer\nIdempotency-Key: uuid
     GW->>GW: Valide JWT · injecte X-User-Id
     GW->>TX: Forward
 
@@ -134,7 +163,7 @@ sequenceDiagram
     ACC->>K: DebitResultEvent(SUCCESS)
 
     K->>TX: DebitResultEvent(SUCCESS)
-    TX->>TX: UPDATE transaction → DEBIT_CONFIRMED
+    TX->>TX: UPDATE → DEBIT_CONFIRMED
     TX->>K: CreditRequestedEvent
 
     K->>ACC: CreditRequestedEvent
@@ -142,18 +171,45 @@ sequenceDiagram
     ACC->>K: CreditResultEvent(SUCCESS)
 
     K->>TX: CreditResultEvent(SUCCESS)
-    TX->>TX: UPDATE transaction → COMPLETED
+    TX->>TX: UPDATE → COMPLETED
+    TX->>K: transaction-events (TRANSFER_COMPLETED)
+
+    par Consommateurs parallèles
+        K->>FRAUD: transaction-events → analyse règles fraude
+        K->>ANA: transaction-events → mise à jour agrégats
+        K->>AUDIT: transaction-events → journal immuable
+    end
 ```
 
-> **Idempotence** : chaque soumission de formulaire génère un UUID unique (`Idempotency-Key`). Si la requête est rejouée (double-clic, timeout réseau), le serveur retourne la transaction existante sans en créer une seconde. La contrainte `UNIQUE` en base garantit ce comportement même sous charge concurrente.
+> **Idempotence** : chaque soumission génère un UUID unique (`Idempotency-Key`). En cas de rejeu (double-clic, timeout réseau), le serveur retourne la transaction existante sans doublon. La contrainte `UNIQUE` en base garantit ce comportement même sous charge concurrente.
 
-> **État intermédiaire `DEBIT_CONFIRMED`** : avant de publier `CreditRequestedEvent`, la transaction passe en `DEBIT_CONFIRMED`. Si Kafka est indisponible à cet instant, `@Transactional` annule la mise à jour — la transaction reste `PENDING` et le message Kafka est relivré. Ce verrou d'état empêche également un `DebitResult` redélivré de déclencher un second crédit.
+> **État intermédiaire `DEBIT_CONFIRMED`** : avant de publier `CreditRequestedEvent`, la transaction passe en `DEBIT_CONFIRMED`. Si Kafka est indisponible, `@Transactional` annule la mise à jour — la transaction reste `PENDING` et le message sera relivré. Ce verrou d'état empêche également un `DebitResult` redélivré de déclencher un second crédit.
 
 ---
 
 ## Sécurité
 
-### Authentification & Autorisation
+### Authentification 2FA
+
+La connexion se fait en **deux étapes** :
+
+```
+1. POST /login     → identifiants valides
+                     → OTP 6 chiffres envoyé par email
+                     → retourne un sessionToken opaque (pas de JWT)
+
+2. POST /verify-otp → sessionToken + code OTP
+                     → JWT access token (24h) + refresh token (7j, HttpOnly cookie)
+```
+
+| Paramètre | Valeur |
+|---|---|
+| Durée OTP | 10 minutes |
+| Tentatives max | 3 (puis session invalidée) |
+| Algorithme | HMAC-SHA256 du code stocké en base |
+| Lockout progressif | Délai croissant après trop d'échecs de login |
+
+### Rôles & Autorisation
 
 | Couche | Mécanisme |
 |---|---|
@@ -163,25 +219,25 @@ sequenceDiagram
 | **Rôles** | `CLIENT` / `ADMIN` — claim `role` dans le JWT |
 | **Email** | Vérification obligatoire à l'inscription (token UUID, expiration 24h) |
 
-### Vérification d'email
-
-À chaque inscription, un email de vérification est envoyé via SMTP (Brevo en prod). Le compte reste **inaccessible tant que l'email n'est pas confirmé**.
-
-- **Compatibilité ascendante** : les comptes créés avant l'introduction de cette feature (`emailVerified = NULL`) sont considérés comme vérifiés.
-- **Token expiré** : le frontend propose de renvoyer un nouveau lien (le token précédent est invalidé).
-- **En développement** : si le SMTP n'est pas configuré, l'URL de vérification est simplement loguée dans la console — aucune exception n'est levée.
-
-### Protection des routes admin (3 couches)
+**Protection des routes admin (3 couches) :**
 
 ```
-Requête → [1] AdminRoute (React)  →  [2] JwtGatewayFilter  →  [3] AdminController
+Requête → [1] AdminRoute (React)  →  [2] JwtGatewayFilter  →  [3] Controller
               Redirige /admin          403 si role ≠ ADMIN       Valide X-User-Role
               si role ≠ ADMIN          avant tout routage         (défense en profondeur)
 ```
 
 - Les comptes `ADMIN` ne peuvent pas accéder au portail client (`ProtectedRoute` les renvoie vers `/admin`)
-- L'inscription publique crée toujours un compte `CLIENT` — il est impossible de s'auto-promouvoir
-- Le compte admin initial est créé par `DataInitializer` au démarrage, via les variables d'environnement `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+- L'inscription publique crée toujours un compte `CLIENT` — impossible de s'auto-promouvoir
+- Le compte admin initial est créé par `DataInitializer` au démarrage via `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+
+**Changement d'email (3 étapes) :**
+
+```
+1. POST /request-email-change   → OTP envoyé sur l'email actuel (preuve de possession)
+2. POST /confirm-email-change-otp → OTP validé → lien de confirmation vers le nouvel email
+3. GET  /verify-new-email?token=... → clic depuis la nouvelle boîte → email mis à jour
+```
 
 ### Sécurité inter-services
 
@@ -192,23 +248,11 @@ Deux secrets distincts protègent les deux types de communication :
 | `JWT_SECRET` | `auth-service` (signe) · `api-gateway` (vérifie) | Authentifie les **utilisateurs** |
 | `INTERNAL_SECRET` | Tous les services backend | Authentifie les **appels inter-services** |
 
-**`JWT_SECRET`** intervient à deux moments : `auth-service` l'utilise pour signer le token à la connexion, `api-gateway` l'utilise pour vérifier la signature à chaque requête entrante. Les deux services doivent partager la même valeur (HMAC-SHA256).
-
-**`INTERNAL_SECRET`** protège les endpoints HTTP des services backend. Chaque service expose un `InternalRequestFilter` qui exige sur toutes les requêtes soit un `X-User-Id` valide (injecté par l'API Gateway après vérification JWT), soit le header `X-Internal-Secret` (pour les appels de service à service). Exemple concret : lors d'une compensation de saga, `transaction-service` appelle directement `POST /api/v1/accounts/{id}/credit` avec ce header — sans passer par l'API Gateway, donc sans JWT utilisateur.
-
-```
-Utilisateur                   transaction-service
-    │  JWT                            │
-    ▼                                 │  X-Internal-Secret
-API Gateway ──── X-User-Id ──▶ account-service
-                                      ▲
-                              InternalRequestFilter
-                         (accepte X-User-Id OU X-Internal-Secret)
-```
+Chaque service expose un `InternalRequestFilter` qui exige sur toutes les requêtes soit un `X-User-Id` valide (injecté par l'API Gateway), soit le header `X-Internal-Secret` (appels service-à-service). Exemple : lors d'une compensation de saga, `transaction-service` appelle directement `account-service` avec ce header sans passer par le gateway.
 
 ### Idempotence des transactions
 
-Chaque virement porte un `Idempotency-Key` (UUID généré côté client). En cas de rejeu :
+Chaque virement porte un `Idempotency-Key` (UUID généré côté client) :
 - **Même clé** → le serveur retourne la transaction existante (pas de doublon)
 - **Succès** → nouvelle clé générée pour le prochain virement
 - **Échec** → même clé conservée (le retry est sûr)
@@ -218,29 +262,90 @@ Chaque virement porte un `Idempotency-Key` (UUID généré côté client). En ca
 ## Services
 
 ### API Gateway — `:8080`
-Point d'entrée unique. Valide le JWT, injecte `X-User-Id` et `X-User-Role` dans chaque requête en aval. Bloque l'accès à `/api/v1/admin/**` pour tout token avec `role ≠ ADMIN`.
+Point d'entrée unique. Valide le JWT, injecte `X-User-Id` et `X-User-Role` dans chaque requête en aval. Bloque `/api/v1/admin/**` pour tout token avec `role ≠ ADMIN`.
 
-Routes publiques (sans JWT) : `POST /api/v1/auth/login`, `POST /api/v1/auth/register`
+Routes publiques (sans JWT) : `POST /auth/login`, `POST /auth/register`, `POST /auth/verify-otp`, `GET /auth/verify-email`, `POST /auth/resend-verification`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /auth/verify-new-email`.
 
 ### auth-service — `:8081`
-- Inscription avec validation stricte du mot de passe (maj, min, chiffre, caractère spécial)
-- **Vérification email** : token UUID envoyé par email (Brevo SMTP), expiration 24h — la connexion est bloquée tant que l'email n'est pas confirmé
-- Login → access token JWT (24h) + refresh token (7j)
-- `DataInitializer` : seede le compte admin au démarrage depuis `ADMIN_EMAIL` / `ADMIN_PASSWORD` (admin pré-vérifié, sans envoi d'email)
-- Endpoints admin : liste des utilisateurs, activation / désactivation
+- Inscription avec validation stricte (maj, min, chiffre, caractère spécial, 8 car. min)
+- **Vérification email** : token UUID envoyé par email (expiration 24h) — la connexion est bloquée tant que l'email n'est pas confirmé
+- **Login 2FA** : OTP 6 chiffres par email, 10 min, 3 tentatives max, lockout progressif
+- **Changement d'email sécurisé** : flux en 3 étapes avec double vérification (OTP ancien email + lien nouvel email)
+- **Changement de mot de passe** : exige le mot de passe actuel, invalide la session
+- Refresh token via HttpOnly cookie, révocation à la déconnexion
+- `DataInitializer` : seede le compte admin au démarrage (pré-vérifié, sans email)
+- Endpoints admin : liste des utilisateurs, activation / désactivation, nettoyage des tokens expirés
 
 ### account-service — `:8082`
-- Création de compte `CHECKING` ou `SAVINGS`
+- Création de compte `CHECKING` (courant) ou `SAVINGS` (épargne) par utilisateur
 - Génération d'IBAN français valide (algorithme MOD-97)
-- Opérations de débit/crédit (consommateur Kafka)
+- Opérations de débit/crédit consommées depuis Kafka (saga)
+- KYC : statut de soumission du dossier utilisateur
 - Endpoints admin : liste de tous les comptes, blocage / déblocage
 
 ### transaction-service — `:8083`
-- Virements asynchrones via Saga Kafka
-- Clé d'idempotence pour la protection contre les doublons
-- Statuts : `PENDING` → `COMPLETED` / `FAILED`
+- Virements asynchrones via Saga Kafka (4 états : `PENDING` → `DEBIT_CONFIRMED` → `COMPLETED` / `FAILED`)
+- Clé d'idempotence (contrainte unique en base)
 - Historique paginé par compte
+- Publication d'événements `transaction-events` consommés par analytics, fraud et audit
 - Endpoints admin : vue globale de toutes les transactions
+
+### messaging-service — `:8084`
+- Messages internes entre utilisateurs et support
+- Support tickets avec gestion des demandes
+- Compteur de messages non lus (badge frontend)
+- Endpoints admin : vue globale des conversations et demandes
+
+### notification-service — `:8085`
+- Notifications in-app (événements côté serveur)
+- Compteur de non-lus (`/unread-count`) pour le badge frontend
+- Marquage lu individuel ou en masse
+- `InternalRequestFilter` pour les appels depuis d'autres services
+
+### card-service — `:8086`
+- Cartes `VIRTUAL` et `PHYSICAL` liées à un compte
+- Génération sécurisée du numéro de carte (stocké hashé, exposé masqué `****-****-****-XXXX`)
+- Expiration générée automatiquement (3 ans), CVV hashé
+- Actions : **freeze**, **unfreeze**, **annuler**, **modifier la limite de dépenses**
+- Une carte annulée ne peut pas être réactivée
+
+### analytics-service — `:8087`
+- Consomme `transaction-events` depuis Kafka (TRANSFER_COMPLETED, DEBIT, CREDIT)
+- Agrège les dépenses et revenus par **utilisateur / compte / mois / catégorie** (`SpendingAggregate`)
+- Endpoints : dépenses du mois courant (avec répartition par catégorie), historique multi-mois
+- Mise à jour incrémentale en temps réel — aucun calcul à la demande
+
+### loan-service — `:8088`
+- **Simulation** : calcule mensualité, taux et coût total sans créer de dossier
+- **Demande** : soumission d'un prêt avec durée, montant et compte de versement
+- Statuts : `PENDING` → `APPROVED` / `REJECTED`
+- Endpoints admin : liste et gestion des demandes de prêt
+
+### fraud-service — `:8089`
+- Consomme `transaction-events` depuis Kafka en temps réel
+- **Règle 1 — Montant élevé** : alerte si montant > 10 000 € (score 75)
+- **Règle 2 — Structuration** : alerte si montant > 5 000 € et multiple de 1 000 € (+20 pts)
+- Score cumulatif plafonné à 100
+- Statuts d'alerte : `OPEN` → `RESOLVED` / `FALSE_POSITIVE`
+- Endpoints : alertes de l'utilisateur connecté ; admin : toutes les alertes ouvertes + résolution
+
+### currency-service — `:8090`
+- Taux de change stockés en base (mise à jour manuelle via endpoint admin)
+- Conversion entre devises avec taux croisés
+- Endpoint public : taux depuis une devise de base (défaut EUR)
+- Conversion : `from` + `to` + `amount` → résultat
+
+### audit-service — `:8091`
+- Journal d'audit **immuable** alimenté exclusivement par Kafka
+- Consomme `transaction-events` (source : transaction-service) et `auth-events` (source : auth-service)
+- Stocke : type d'événement, source, userId, entityType, entityId, payload JSON brut, timestamp
+- Endpoints : événements de l'utilisateur connecté (paginé) ; admin : tous les événements filtrables par type
+
+### document-service — `:8092`
+- Génération de **RIB en PDF** à la demande (iText / PDFBox)
+- Récupère les coordonnées bancaires depuis `account-service` via `X-Internal-Secret`
+- Historique des documents générés par utilisateur
+- Le PDF est servi en téléchargement direct (`Content-Disposition: attachment`)
 
 ---
 
@@ -248,37 +353,36 @@ Routes publiques (sans JWT) : `POST /api/v1/auth/login`, `POST /api/v1/auth/regi
 
 ### Développement local
 
-**Prérequis** : Java 21, Maven 3.9+, Docker Desktop
+**Prérequis** : Java 21, Docker Desktop
 
 ```bash
-# 1. Démarrer PostgreSQL et Kafka
+# 1. Infrastructure (PostgreSQL × 12 + Kafka)
 cd infrastructure
 docker compose up -d
 
-# 2. Lancer les services (un terminal par service)
-cd services/auth-service        && ./mvnw spring-boot:run
-cd services/account-service     && ./mvnw spring-boot:run
-cd services/transaction-service && ./mvnw spring-boot:run
-cd services/api-gateway         && ./mvnw spring-boot:run
+# 2. Lancer les services (un terminal par service, ou via IDE)
+cd services/auth-service        && ./mvnw spring-boot:run   # :8081
+cd services/account-service     && ./mvnw spring-boot:run   # :8082
+cd services/transaction-service && ./mvnw spring-boot:run   # :8083
+cd services/api-gateway         && ./mvnw spring-boot:run   # :8080
+# ... idem pour les autres services
 
-# 3. Lancer le frontend
-cd frontend
-npm install
-npm run dev          # http://localhost:5173 avec proxy → gateway :8080
+# 3. Frontend
+cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
-Pour créer le compte admin en local, ajoute dans `services/auth-service/src/main/resources/application.properties` :
+**Compte admin en local** — ajouter dans `services/auth-service/src/main/resources/application.properties` :
 ```properties
 admin.email=admin@solaris.bank
 admin.password=TonMotDePasse123!
 ```
-Puis redémarre `auth-service`. Supprime ces lignes ensuite (ne pas committer).
+Redémarrer `auth-service`, puis supprimer ces lignes (ne pas committer).
 
-**Vérification email en local** : si `SMTP_USERNAME` / `SMTP_PASSWORD` ne sont pas définis, l'envoi d'email échoue silencieusement et l'URL de vérification est loguée directement dans la console de `auth-service` :
+**Email / OTP en local** — si `SMTP_USERNAME` / `SMTP_PASSWORD` ne sont pas définis, les emails échouent silencieusement et l'URL / le code OTP sont loggés dans la console :
 ```
+[EmailService] SMTP not configured — OTP for user jean@solaris.com: 482916
 [EmailService] SMTP not configured — verification URL: http://localhost:5173/verify-email?token=<uuid>
 ```
-Colle l'URL dans ton navigateur pour vérifier le compte sans SMTP.
 
 ### Production (Docker Compose)
 
@@ -303,86 +407,218 @@ Les images sont construites et poussées vers GHCR par GitHub Actions à chaque 
 | `SMTP_FROM` | Adresse expéditeur | — |
 | `FRONTEND_URL` | URL publique du frontend | — |
 
-Une fois ces secrets configurés, chaque push sur `main` déclenche automatiquement build → push GHCR → déploiement SSH sur le NAS.
-
-> **Déploiement manuel** (sans GitHub Actions) : les mêmes variables peuvent être définies dans un fichier `.env` aux côtés de `docker-compose.prod.yml`, puis lancer `docker compose -f docker-compose.prod.yml up -d`.
-
 Seul le port **8080** est exposé (nginx frontend). L'api-gateway et les microservices sont internes au réseau Docker.
+
+> **Déploiement manuel** : les mêmes variables peuvent être définies dans un fichier `.env` aux côtés de `docker-compose.prod.yml`, puis `docker compose -f docker-compose.prod.yml up -d`.
+
+**Configuration SMTP (Brevo) :**
+```
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=<ton_email_brevo>
+SMTP_PASSWORD=<clé_smtp_brevo>
+SMTP_FROM=noreply@ton-domaine.fr
+FRONTEND_URL=https://ton-domaine.fr
+```
+Pour éviter le spam, authentifier le domaine dans Brevo (DKIM + DMARC).
 
 ---
 
 ## API Reference
 
-Toutes les requêtes passent par le gateway sur le port **8080**.  
+Toutes les requêtes passent par le gateway sur le port **8080**.
 Les routes protégées nécessitent `Authorization: Bearer <token>`.
 
 ### Auth
 
 ```bash
-# Inscription — envoie un email de vérification
+# Inscription
 POST /api/v1/auth/register
 { "firstname": "Jean", "lastname": "Dupont", "email": "jean@solaris.com", "password": "Pass@123" }
-# → 201 { "message": "Account created successfully", "userId": "uuid..." }
+# → 201 { "message": "Account created successfully", "userId": "uuid" }
 
-# Connexion (403 si email non vérifié)
+# Étape 1 — connexion (retourne un sessionToken, PAS de JWT)
 POST /api/v1/auth/login
 { "email": "jean@solaris.com", "password": "Pass@123" }
-# → 200 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "role": "CLIENT" }
+# → 200 { "sessionToken": "uuid" }   (OTP envoyé par email)
+
+# Étape 2 — vérification OTP (retourne le JWT)
+POST /api/v1/auth/verify-otp
+{ "sessionToken": "uuid", "code": "482916" }
+# → 200 { "accessToken": "eyJ...", "role": "CLIENT" }
+
+# Renvoyer l'OTP
+POST /api/v1/auth/resend-otp
+{ "sessionToken": "uuid" }
 
 # Vérification de l'email (lien reçu par mail)
 GET /api/v1/auth/verify-email?token=<uuid>
-# → 200 OK         Email vérifié
-# → 404 Not Found  Token invalide
-# → 410 Gone       Token expiré (renvoyer un nouveau lien)
+# → 200 OK | 404 invalide | 410 expiré
 
 # Renvoyer l'email de vérification
 POST /api/v1/auth/resend-verification
 { "email": "jean@solaris.com" }
-# → 200 OK  Nouveau token envoyé (remplace l'ancien)
+
+# Refresh token
+POST /api/v1/auth/refresh   (cookie HttpOnly)
+
+# Déconnexion (révoque le refresh token)
+POST /api/v1/auth/logout
+
+# Changer de mot de passe
+POST /api/v1/auth/change-password
+{ "currentPassword": "...", "newPassword": "..." }
+
+# Changer d'email — étape 1 : OTP sur l'email actuel
+POST /api/v1/auth/request-email-change
+{ "newEmail": "nouveau@exemple.com", "currentPassword": "..." }
+
+# Changer d'email — étape 2 : valider l'OTP
+POST /api/v1/auth/confirm-email-change-otp
+{ "code": "123456" }
+
+# Changer d'email — étape 3 : clic sur le lien dans la nouvelle boîte
+GET /api/v1/auth/verify-new-email?token=<uuid>
+
+# Mot de passe oublié
+POST /api/v1/auth/forgot-password  { "email": "..." }
+POST /api/v1/auth/reset-password   { "token": "...", "newPassword": "..." }
 ```
 
 ### Comptes
 
 ```bash
-POST   /api/v1/accounts              # Créer un compte { "type": "CHECKING" | "SAVINGS" }
-GET    /api/v1/accounts              # Lister mes comptes
-GET    /api/v1/accounts/{id}         # Détail d'un compte
-PUT    /api/v1/accounts/{id}/status  # Changer le statut (?status=BLOCKED)
+POST   /api/v1/accounts              # Créer { "type": "CHECKING" | "SAVINGS" }
+GET    /api/v1/accounts              # Mes comptes
+GET    /api/v1/accounts/{id}         # Détail
+GET    /api/v1/accounts/kyc/status   # Statut KYC
+POST   /api/v1/accounts/kyc/submit   # Soumettre le dossier KYC
 ```
 
 ### Transactions
 
 ```bash
-POST /api/v1/transactions/transfer   # Effectuer un virement
-     Idempotency-Key: <uuid>         # Header recommandé
+POST /api/v1/transactions/transfer
+     Idempotency-Key: <uuid>
      { "fromAccountId": "uuid", "toAccountId": "uuid", "amount": 100.00 }
-# → 202 Accepted (statut PENDING, traitement asynchrone)
+# → 202 Accepted (PENDING, traitement asynchrone)
 
-GET  /api/v1/transactions?accountId=<uuid>&page=0&size=20  # Historique paginé
-GET  /api/v1/transactions/{id}                             # Détail d'une transaction
+GET  /api/v1/transactions?accountId=<uuid>&page=0&size=20
+GET  /api/v1/transactions/{id}
+```
+
+### Cartes
+
+```bash
+POST   /api/v1/cards                   # Créer { "accountId": "uuid", "cardType": "VIRTUAL" }
+GET    /api/v1/cards                   # Mes cartes
+POST   /api/v1/cards/{id}/freeze       # Geler
+POST   /api/v1/cards/{id}/unfreeze     # Dégeler
+PUT    /api/v1/cards/{id}/limit        # { "limit": 500.00 }
+DELETE /api/v1/cards/{id}              # Annuler définitivement
+```
+
+### Prêts
+
+```bash
+POST /api/v1/loans/simulate
+     { "amount": 10000, "durationMonths": 36 }
+# → { "monthlyPayment": 302.11, "totalCost": 10875.96, "annualRate": 5.5 }
+
+POST /api/v1/loans                     # Soumettre une demande
+GET  /api/v1/loans                     # Mes prêts
+```
+
+### Analytique
+
+```bash
+GET /api/v1/analytics/spending/monthly?year=2026&month=6
+# → agrégats par catégorie pour le mois donné
+
+GET /api/v1/analytics/spending/history
+# → historique multi-mois (year, month, totalDebit, totalCredit, txCount)
+```
+
+### Fraude
+
+```bash
+GET /api/v1/fraud/alerts               # Mes alertes de fraude
+```
+
+### Devises
+
+```bash
+GET /api/v1/currencies/rates?base=EUR   # Taux depuis une devise de base
+GET /api/v1/currencies/convert?from=EUR&to=USD&amount=100
+```
+
+### Audit
+
+```bash
+GET /api/v1/audit/my-events?page=0&size=20   # Mon journal d'audit
+```
+
+### Documents
+
+```bash
+GET /api/v1/documents/rib/{accountId}   # Télécharger le RIB PDF
+GET /api/v1/documents/history           # Historique des documents générés
+```
+
+### Notifications
+
+```bash
+GET   /api/v1/notifications?page=0&size=20    # Mes notifications
+GET   /api/v1/notifications/unread-count      # { "count": 3 }
+PATCH /api/v1/notifications/{id}/read         # Marquer lu
+PATCH /api/v1/notifications/read-all          # Tout marquer lu
 ```
 
 ### Admin _(rôle ADMIN requis)_
 
 ```bash
-GET   /api/v1/admin/users                       # Liste tous les utilisateurs
-PATCH /api/v1/admin/users/{id}/status?active=false  # Activer / désactiver
-GET   /api/v1/admin/accounts?page=0&size=20     # Tous les comptes
-PATCH /api/v1/admin/accounts/{id}/status?status=BLOCKED  # Bloquer / débloquer
-GET   /api/v1/admin/transactions?page=0&size=20 # Toutes les transactions
+# Utilisateurs
+GET   /api/v1/admin/users
+PATCH /api/v1/admin/users/{id}/status?active=false
+
+# Comptes
+GET   /api/v1/admin/accounts?page=0&size=20
+PATCH /api/v1/admin/accounts/{id}/status?status=BLOCKED
+
+# Transactions
+GET   /api/v1/admin/transactions?page=0&size=20
+
+# Fraude
+GET  /api/v1/admin/fraud/alerts
+POST /api/v1/admin/fraud/alerts/{id}/resolve
+     { "resolution": "FALSE_POSITIVE" | "RESOLVED", "note": "..." }
+
+# Prêts
+GET   /api/v1/admin/loans
+PATCH /api/v1/admin/loans/{id}/status?status=APPROVED
+
+# Devises
+PUT /api/v1/currencies/admin/rates
+    { "base": "EUR", "target": "USD", "rate": 1.085 }
+
+# Audit
+GET /api/v1/admin/audit/events?eventType=TRANSACTION&page=0&size=50
 ```
 
 ### Codes HTTP
 
 | Code | Signification |
 |---|---|
+| `200` | OK |
 | `201` | Ressource créée |
 | `202` | Accepté (traitement asynchrone en cours) |
+| `204` | Succès sans contenu |
 | `400` | Validation échouée (champ manquant, format invalide) |
-| `401` | Token absent, expiré ou identifiants incorrects |
-| `403` | Accès refusé (ressource d'un autre utilisateur ou rôle insuffisant) |
+| `401` | Token absent, expiré, OTP incorrect ou identifiants invalides |
+| `403` | Accès refusé (ressource d'un autre utilisateur, rôle insuffisant, email non vérifié) |
 | `404` | Ressource introuvable |
-| `409` | Conflit (email déjà utilisé) |
+| `409` | Conflit (email déjà utilisé, doublon) |
+| `410` | Token expiré (OTP, lien de vérification) |
 | `500` | Erreur serveur inattendue |
 
 ---
@@ -392,28 +628,38 @@ GET   /api/v1/admin/transactions?page=0&size=20 # Toutes les transactions
 ```
 banking-platform/
 ├── .github/
-│   └── workflows/
-│       ├── build.yml          # CI — build, tests, couverture (5 services en parallèle)
-│       └── deploy.yml         # CD — push GHCR + SSH deploy sur TrueNAS
+│   ├── workflows/
+│   │   ├── build.yml          # CI — 13 services + frontend en parallèle, badges de couverture
+│   │   └── deploy.yml         # CD — push GHCR + SSH deploy sur TrueNAS
+│   └── badges/                # SVG de couverture générés automatiquement
 │
 ├── services/
-│   ├── api-gateway/           # Spring Boot — JWT filter, proxy HTTP, routing
-│   ├── auth-service/          # Spring Boot — register/login, admin users, JWT
-│   ├── account-service/       # Spring Boot — comptes IBAN, Kafka consumer
-│   └── transaction-service/   # Spring Boot — virements, Saga, idempotence
+│   ├── api-gateway/           # :8080 — JWT filter, routing, proxy
+│   ├── auth-service/          # :8081 — register, login 2FA, email, JWT, admin users
+│   ├── account-service/       # :8082 — comptes IBAN, Kafka consumer débit/crédit
+│   ├── transaction-service/   # :8083 — virements Saga, idempotence
+│   ├── messaging-service/     # :8084 — messages, support tickets
+│   ├── notification-service/  # :8085 — notifications in-app
+│   ├── card-service/          # :8086 — cartes, freeze, limite
+│   ├── analytics-service/     # :8087 — agrégats dépenses/revenus (Kafka)
+│   ├── loan-service/          # :8088 — simulation et demande de prêt
+│   ├── fraud-service/         # :8089 — détection fraude temps réel (Kafka)
+│   ├── currency-service/      # :8090 — taux de change, conversion
+│   ├── audit-service/         # :8091 — journal immuable (Kafka)
+│   └── document-service/      # :8092 — génération PDF (RIB)
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/        # Layout, Navbar, AdminLayout, ProtectedRoute, AdminRoute…
-│   │   ├── pages/             # LoginPage, DashboardPage, TransferPage…
+│   │   ├── pages/             # LoginPage, OtpVerificationPage, DashboardPage…
 │   │   │   └── admin/         # AdminDashboardPage, AdminUsersPage…
-│   │   ├── lib/               # api.ts (Axios), auth.ts (JWT decode)
-│   │   └── types/             # Interfaces TypeScript (Account, Transaction, AdminUser…)
-│   ├── nginx.conf             # Sert la SPA + proxy /api/* → api-gateway
+│   │   ├── lib/               # api.ts (Axios + interceptors), auth.ts (JWT decode)
+│   │   └── types/             # Interfaces TypeScript partagées
+│   ├── nginx.conf             # SPA + proxy /api/* → api-gateway
 │   └── Dockerfile             # Multi-stage : node build → nginx
 │
 └── infrastructure/
-    ├── docker-compose.yml      # Local : PostgreSQL × 3 + Kafka
+    ├── docker-compose.yml      # Local : PostgreSQL × 12 + Kafka (KRaft)
     └── docker-compose.prod.yml # Production : stack complète (images GHCR)
 ```
 
@@ -423,66 +669,27 @@ banking-platform/
 
 | Couche | Technologie |
 |---|---|
-| Language backend | Java 21 |
+| Langage backend | Java 21 |
 | Framework | Spring Boot 4.x |
 | Sécurité | Spring Security · JJWT 0.12 · BCrypt |
 | Persistance | Spring Data JPA · Hibernate · PostgreSQL 16 |
+| Migrations | Flyway |
 | Messaging | Apache Kafka (KRaft, sans ZooKeeper) |
-| Frontend | React 19 · Vite 8 · TypeScript 6 |
-| UI | Tailwind CSS v4 · shadcn/ui · Lucide |
-| HTTP client (FE) | Axios · TanStack Query v5 |
-| Formulaires (FE) | React Hook Form v7 · Zod v4 |
+| Frontend | React 19 · Vite · TypeScript |
+| UI | Tailwind CSS v4 · shadcn/ui · Lucide Icons |
+| HTTP client | Axios · TanStack Query v5 |
+| Formulaires | React Hook Form · Zod |
+| PDF | iText / PDFBox (document-service) |
 | Emails transactionnels | Spring Mail · Brevo SMTP (STARTTLS) |
 | Conteneurisation | Docker · Docker Compose |
 | CI/CD | GitHub Actions · GHCR |
 | Déploiement | TrueNAS Scale (VM) · nginx reverse proxy |
-| Build | Maven 3.9 · npm |
-
-## Vérification email
-
-Lors de l'inscription, chaque nouvel utilisateur reçoit un email de confirmation avant de pouvoir se connecter.
-
-### Flux complet
-
-```
-1. POST /register        → compte créé (emailVerified=false) + email envoyé
-2. Utilisateur clique    → GET /verify-email?token=<uuid>
-3. Token valide          → emailVerified=true, accès autorisé
-4. Token expiré (>24h)   → 410 Gone → frontend propose de renvoyer un lien
-5. POST /resend-verification → nouveau token (24h) envoyé, ancien invalidé
-```
-
-### Comportements notables
-
-| Cas | Comportement |
-|---|---|
-| Email non vérifié → login | `403 Forbidden` — "Email not verified. Please check your inbox." |
-| Token expiré | `410 Gone` — le frontend affiche un bouton "Renvoyer le lien" |
-| Token invalide / déjà utilisé | `404 Not Found` |
-| Compte admin (créé par DataInitializer) | Pré-vérifié — aucun email envoyé |
-| Utilisateurs existants (avant la feature) | `emailVerified = NULL` → traité comme vérifié (compatibilité ascendante) |
-| SMTP non configuré (dev) | URL de vérification loguée dans la console, aucune exception |
-
-### Configuration SMTP (Brevo)
-
-Le service utilise [Brevo](https://brevo.com) comme fournisseur SMTP par défaut. Les variables d'environnement à définir en production :
-
-```
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USERNAME=<ton_email_brevo>
-SMTP_PASSWORD=<clé_smtp_brevo>   # Générer dans Brevo → SMTP & API → Clés SMTP
-SMTP_FROM=noreply@ton-domaine.fr
-FRONTEND_URL=https://ton-domaine.fr
-```
-
-Pour que les emails arrivent en boîte principale et non en spam, il est recommandé d'authentifier le domaine d'envoi dans Brevo (enregistrements DKIM + DMARC dans le DNS).
+| Tests | JUnit 5 · Mockito · Spring Boot Test · H2 |
 
 ---
 
 ## Contribution
 
-Ce repo constitue un projet personnel d'entrainement à la conception, au design et à l'implémentation d'une application web de bank.
+Ce repo constitue un projet personnel d'entraînement à la conception, au design et à l'implémentation d'une application web bancaire.
 
 Aucune contribution n'est attendue.
-
