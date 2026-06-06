@@ -24,10 +24,15 @@ export default function OtpVerificationPage() {
 
   const sessionToken = sessionStorage.getItem('otpSessionToken')
 
-  // Redirect back to login if there's no session token
+  // Guard: redirect to login if the page is accessed directly without a session token.
+  // Runs only on mount — putting sessionToken in deps would cause a spurious redirect
+  // when handleSubmit removes the token from sessionStorage before navigating away.
   useEffect(() => {
-    if (!sessionToken) navigate('/login', { replace: true })
-  }, [sessionToken, navigate])
+    if (!sessionStorage.getItem('otpSessionToken')) {
+      navigate('/login', { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Countdown timer
   useEffect(() => {
