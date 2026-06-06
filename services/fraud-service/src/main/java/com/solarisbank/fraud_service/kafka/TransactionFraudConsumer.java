@@ -2,6 +2,7 @@ package com.solarisbank.fraud_service.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.fraud_service.model.FraudAlert;
 import com.solarisbank.fraud_service.repository.FraudAlertRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,10 @@ public class TransactionFraudConsumer {
     private static final BigDecimal HIGH_AMOUNT_THRESHOLD = new BigDecimal("10000");
 
     private final FraudAlertRepository repo;
-    private final ObjectMapper objectMapper;
+    // Instantiated directly — Spring Boot 4 auto-configures tools.jackson (Jackson 3.x)
+    // as its default ObjectMapper bean; com.fasterxml.jackson ObjectMapper is not
+    // registered, so constructor injection would fail. Create it inline instead.
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @KafkaListener(topics = "transaction-events", groupId = "fraud-service")
     @Transactional

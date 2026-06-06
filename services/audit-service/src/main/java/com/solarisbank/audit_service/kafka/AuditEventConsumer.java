@@ -2,6 +2,7 @@ package com.solarisbank.audit_service.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.audit_service.model.AuditEvent;
 import com.solarisbank.audit_service.repository.AuditEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +20,10 @@ import java.util.UUID;
 public class AuditEventConsumer {
 
     private final AuditEventRepository repo;
-    private final ObjectMapper objectMapper;
+    // Instantiated directly — Spring Boot 4 auto-configures tools.jackson (Jackson 3.x)
+    // as its default ObjectMapper bean; com.fasterxml.jackson ObjectMapper is not
+    // registered, so constructor injection would fail. Create it inline instead.
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @KafkaListener(topics = "transaction-events", groupId = "audit-service")
     @Transactional

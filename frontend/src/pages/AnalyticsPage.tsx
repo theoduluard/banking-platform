@@ -440,7 +440,7 @@ export default function AnalyticsPage() {
           onClick={() => setShowHistory(v => !v)}
         >
           <TrendingUp size={14} />
-          {showHistory ? 'Masquer l'historique' : 'Voir l'historique complet'}
+          {showHistory ? "Masquer l'historique" : "Voir l'historique complet"}
           <ChevronRight
             size={14}
             className={`transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`}

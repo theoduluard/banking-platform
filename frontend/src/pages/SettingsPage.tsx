@@ -240,7 +240,7 @@ function EmailSection() {
 
         {/* ── Step indicator ── */}
         <div className="mb-6 flex items-center gap-2">
-          {(['Demande', 'Confirmation', 'Vérification').map((label, idx) => {
+          {(['Demande', 'Confirmation', 'Vérification'] as const).map((label, idx) => {
             const stepIdx = step === 'form' ? 0 : step === 'otp' ? 1 : 2
             const done    = idx < stepIdx
             const active  = idx === stepIdx

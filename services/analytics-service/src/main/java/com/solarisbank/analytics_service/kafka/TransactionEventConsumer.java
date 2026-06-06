@@ -2,6 +2,7 @@ package com.solarisbank.analytics_service.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.analytics_service.model.SpendingAggregate;
 import com.solarisbank.analytics_service.repository.SpendingAggregateRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,10 @@ import java.util.UUID;
 public class TransactionEventConsumer {
 
     private final SpendingAggregateRepository repo;
-    private final ObjectMapper objectMapper;
+    // Instantiated directly — Spring Boot 4 auto-configures tools.jackson (Jackson 3.x)
+    // as its default ObjectMapper bean; injecting com.fasterxml.jackson ObjectMapper
+    // via constructor would require an explicit @Bean, so we create it inline instead.
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @KafkaListener(topics = "transaction-events", groupId = "analytics-service")
     @Transactional
