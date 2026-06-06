@@ -22,6 +22,8 @@ import ScheduledTransfersPage from '@/pages/ScheduledTransfersPage'
 import BeneficiariesPage      from '@/pages/BeneficiariesPage'
 import MessagesPage       from '@/pages/MessagesPage'
 import RequestsPage       from '@/pages/RequestsPage'
+import SettingsPage       from '@/pages/SettingsPage'
+import VerifyNewEmailPage from '@/pages/VerifyNewEmailPage'
 
 import AdminDashboardPage    from '@/pages/admin/AdminDashboardPage'
 import AdminUsersPage        from '@/pages/admin/AdminUsersPage'
@@ -51,6 +53,7 @@ export default function App() {
           <Route path="/verify-email"     element={<VerifyEmailPage />} />
           <Route path="/forgot-password"  element={<ForgotPasswordPage />} />
           <Route path="/reset-password"   element={<ResetPasswordPage />} />
+          <Route path="/verify-new-email" element={<VerifyNewEmailPage />} />
 
           {/* Onboarding — protected, no Layout (full-page flow) */}
           <Route path="/onboarding/kyc" element={<ProtectedRoute><KYCPage /></ProtectedRoute>} />
@@ -65,6 +68,7 @@ export default function App() {
             <Route path="/beneficiaries"        element={<BeneficiariesPage />} />
             <Route path="/messages"      element={<MessagesPage />} />
             <Route path="/requests"      element={<RequestsPage />} />
+            <Route path="/settings"      element={<SettingsPage />} />
           </Route>
 
           {/* Admin — ADMIN role required, own sidebar layout */}

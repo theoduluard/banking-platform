@@ -5,9 +5,11 @@ import com.solarisbank.auth_service.dto.LoginResponse;
 import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
 import com.solarisbank.auth_service.exception.BusinessException;
+import com.solarisbank.auth_service.model.EmailChangeRequest;
 import com.solarisbank.auth_service.model.OtpChallenge;
 import com.solarisbank.auth_service.model.RefreshToken;
 import com.solarisbank.auth_service.model.User;
+import com.solarisbank.auth_service.repository.EmailChangeRequestRepository;
 import com.solarisbank.auth_service.repository.OtpChallengeRepository;
 import com.solarisbank.auth_service.repository.RefreshTokenRepository;
 import com.solarisbank.auth_service.repository.UserRepository;
@@ -37,13 +39,14 @@ import java.util.UUID;
 @Slf4j
 public class AuthService {
 
-    private final UserRepository         userRepository;
-    private final PasswordEncoder        passwordEncoder;
-    private final AuthenticationManager  authenticationManager;
-    private final JwtService             jwtService;
-    private final EmailService           emailService;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final OtpChallengeRepository otpChallengeRepository;
+    private final UserRepository                userRepository;
+    private final PasswordEncoder               passwordEncoder;
+    private final AuthenticationManager         authenticationManager;
+    private final JwtService                    jwtService;
+    private final EmailService                  emailService;
+    private final RefreshTokenRepository        refreshTokenRepository;
+    private final OtpChallengeRepository        otpChallengeRepository;
+    private final EmailChangeRequestRepository  emailChangeRequestRepository;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -371,6 +374,149 @@ public class AuthService {
         log.info("[Logout] Refresh token revoked");
     }
 
+    // ── Password change ───────────────────────────────────────────────────────
+
+    /**
+     * Changes the user's password after verifying the current one.
+     * Revokes all active refresh tokens (forces re-login on all devices).
+     * Sends an email notification to confirm the change.
+     */
+    @Transactional
+    public void changePassword(String userEmail, String currentPassword, String newPassword) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BusinessException("Current password is incorrect", HttpStatus.UNAUTHORIZED);
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        // Revoke all sessions — the user must re-login on every device
+        refreshTokenRepository.deleteByUser(user);
+
+        emailService.sendPasswordChangedEmail(user.getEmail(), user.getFirstname());
+        log.info("[ChangePassword] Password changed for user id={}", user.getUserId());
+    }
+
+    // ── Email change (3-step) ────────────────────────────────────────────────
+
+    /**
+     * Step 1 — initiates an email-change request.
+     * Verifies the current password, checks the new address is available,
+     * generates a 6-digit OTP and sends it to the user's <em>current</em> email.
+     */
+    @Transactional
+    public void requestEmailChange(String userEmail, String newEmail, String currentPassword) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BusinessException("Current password is incorrect", HttpStatus.UNAUTHORIZED);
+        }
+
+        if (userEmail.equalsIgnoreCase(newEmail)) {
+            throw new BusinessException("New email must be different from the current one", HttpStatus.BAD_REQUEST);
+        }
+
+        if (userRepository.existsByEmail(newEmail)) {
+            throw new BusinessException("Email already in use", HttpStatus.CONFLICT);
+        }
+
+        // Replace any previous pending request
+        emailChangeRequestRepository.deleteByUser(user);
+
+        String rawCode = String.format("%06d", secureRandom.nextInt(1_000_000));
+
+        emailChangeRequestRepository.save(EmailChangeRequest.builder()
+                .user(user)
+                .newEmail(newEmail)
+                .otpCodeHash(sha256(rawCode))
+                .expiresAt(LocalDateTime.now().plusMinutes(OTP_VALIDITY_MINUTES))
+                .build());
+
+        emailService.sendEmailChangeOtpEmail(user.getEmail(), user.getFirstname(), rawCode);
+        log.info("[EmailChange] Step 1 — OTP sent to current email for user id={}", user.getUserId());
+    }
+
+    /**
+     * Step 2 — validates the OTP sent to the current email.
+     * On success, generates a single-use verification token and sends it (as a
+     * link) to the <em>new</em> email address.
+     */
+    @Transactional
+    public void confirmEmailChangeOtp(String userEmail, String code) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
+
+        EmailChangeRequest request = emailChangeRequestRepository.findPendingOtpByUser(user)
+                .orElseThrow(() -> new BusinessException(
+                        "No pending email-change request. Please start again.", HttpStatus.NOT_FOUND));
+
+        if (request.getExpiresAt().isBefore(LocalDateTime.now())) {
+            emailChangeRequestRepository.delete(request);
+            throw new BusinessException("OTP has expired. Please start again.", HttpStatus.GONE);
+        }
+
+        if (!request.getOtpCodeHash().equals(sha256(code))) {
+            throw new BusinessException("Invalid code. Please check your email.", HttpStatus.UNAUTHORIZED);
+        }
+
+        // OTP validated — advance to step 2
+        String verifyToken = UUID.randomUUID().toString();
+        request.setOtpVerifiedAt(LocalDateTime.now());
+        request.setVerifyToken(verifyToken);
+        request.setExpiresAt(LocalDateTime.now().plusHours(1));   // 1 h to click the link
+        emailChangeRequestRepository.save(request);
+
+        emailService.sendNewEmailVerificationEmail(request.getNewEmail(), user.getFirstname(), verifyToken);
+        log.info("[EmailChange] Step 2 — verification link sent to new email for user id={}", user.getUserId());
+    }
+
+    /**
+     * Step 3 — called when the user clicks the link in the new-email verification message.
+     * Updates the email, revokes all sessions (fresh login required), and notifies
+     * the old address.
+     */
+    @Transactional
+    public void verifyNewEmail(String token) {
+        EmailChangeRequest request = emailChangeRequestRepository.findByVerifyToken(token)
+                .orElseThrow(() -> new BusinessException(
+                        "Invalid or expired verification link.", HttpStatus.NOT_FOUND));
+
+        if (request.getOtpVerifiedAt() == null) {
+            throw new BusinessException("Invalid request state.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (request.getExpiresAt().isBefore(LocalDateTime.now())) {
+            emailChangeRequestRepository.delete(request);
+            throw new BusinessException("Link has expired. Please start again.", HttpStatus.GONE);
+        }
+
+        User user     = request.getUser();
+        String oldEmail = user.getEmail();
+        String newEmail = request.getNewEmail();
+
+        // Guard against a race: the new email might have been registered since step 1
+        if (userRepository.existsByEmail(newEmail)) {
+            emailChangeRequestRepository.delete(request);
+            throw new BusinessException("Email already in use. Please start again.", HttpStatus.CONFLICT);
+        }
+
+        user.setEmail(newEmail);
+        userRepository.save(user);
+
+        request.setCompletedAt(LocalDateTime.now());
+        emailChangeRequestRepository.save(request);
+
+        // All sessions are tied to the old email — revoke them so the user re-logs in
+        refreshTokenRepository.deleteByUser(user);
+
+        emailService.sendEmailChangedNotificationEmail(oldEmail, user.getFirstname(), newEmail);
+        log.info("[EmailChange] Step 3 — email changed from {} to {} for user id={}", oldEmail, newEmail, user.getUserId());
+    }
+
     // ── Housekeeping ──────────────────────────────────────────────────────────
 
     /**
@@ -382,10 +528,12 @@ public class AuthService {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void cleanupExpiredTokens() {
-        int deletedRefresh = refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
-        int deletedOtp     = otpChallengeRepository.deleteByExpiresAtBefore(LocalDateTime.now());
-        log.info("[Cleanup] Purged {} refresh token(s) and {} OTP challenge(s)",
-                deletedRefresh, deletedOtp);
+        int deletedRefresh    = refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+        int deletedOtp        = otpChallengeRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+        int deletedEmailChg   = emailChangeRequestRepository
+                .deleteByExpiresAtBeforeAndCompletedAtIsNull(LocalDateTime.now());
+        log.info("[Cleanup] Purged {} refresh token(s), {} OTP challenge(s), {} email-change request(s)",
+                deletedRefresh, deletedOtp, deletedEmailChg);
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────

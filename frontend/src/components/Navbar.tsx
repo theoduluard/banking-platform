@@ -4,7 +4,7 @@ import { removeToken, getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import axios from 'axios'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from './Logo'
 
@@ -16,6 +16,7 @@ const navLinks = [
   { to: '/messages',        label: 'Messages',          icon: Bell },
   { to: '/requests',        label: 'Demandes',          icon: MessageSquare },
   { to: '/accounts/new',    label: 'Nouveau compte',   icon: PlusCircle },
+  { to: '/settings',        label: 'Paramètres',        icon: Settings },
 ]
 
 export default function Navbar() {

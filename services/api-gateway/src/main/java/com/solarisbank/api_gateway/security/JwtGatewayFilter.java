@@ -40,6 +40,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             // the session token is passed in the request body, not in Authorization.
             "/api/v1/auth/verify-otp",
             "/api/v1/auth/resend-otp",
+            // Email-change step 3 — user clicks a link from their inbox (no JWT).
+            "/api/v1/auth/verify-new-email",
             // Prometheus scraping and health probes — internal traffic only
             "/actuator/prometheus",
             "/actuator/health"

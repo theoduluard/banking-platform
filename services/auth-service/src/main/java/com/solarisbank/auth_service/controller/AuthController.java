@@ -1,10 +1,13 @@
 package com.solarisbank.auth_service.controller;
 
+import com.solarisbank.auth_service.dto.ChangePasswordRequest;
+import com.solarisbank.auth_service.dto.ConfirmEmailChangeOtpRequest;
 import com.solarisbank.auth_service.dto.ForgotPasswordRequest;
 import com.solarisbank.auth_service.dto.LoginRequest;
 import com.solarisbank.auth_service.dto.LoginResponse;
 import com.solarisbank.auth_service.dto.OtpChallengeResponse;
 import com.solarisbank.auth_service.dto.RegisterRequest;
+import com.solarisbank.auth_service.dto.RequestEmailChangeRequest;
 import com.solarisbank.auth_service.dto.ResendVerificationRequest;
 import com.solarisbank.auth_service.dto.ResetPasswordRequest;
 import com.solarisbank.auth_service.dto.VerifyOtpRequest;
@@ -19,6 +22,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
 
 import java.util.Map;
 
@@ -177,6 +182,56 @@ public class AuthController {
             @Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request.getToken(), request.getPassword());
         return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
+    }
+
+    // ── Account settings (authenticated) ─────────────────────────────────────
+
+    /**
+     * Changes the authenticated user's password.
+     * Requires the current password as proof of identity.
+     * All active sessions are revoked; the user must re-login on every device.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            Principal principal) {
+        authService.changePassword(principal.getName(), request.getCurrentPassword(), request.getNewPassword());
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully. Please log in again."));
+    }
+
+    /**
+     * Step 1 of email change: validates current password and new email,
+     * then sends a 6-digit OTP to the user's CURRENT email address.
+     */
+    @PostMapping("/request-email-change")
+    public ResponseEntity<Map<String, String>> requestEmailChange(
+            @Valid @RequestBody RequestEmailChangeRequest request,
+            Principal principal) {
+        authService.requestEmailChange(principal.getName(), request.getNewEmail(), request.getCurrentPassword());
+        return ResponseEntity.ok(Map.of("message", "A verification code has been sent to your current email address."));
+    }
+
+    /**
+     * Step 2 of email change: validates the OTP from the current email,
+     * then sends a verification link to the NEW email address.
+     */
+    @PostMapping("/confirm-email-change-otp")
+    public ResponseEntity<Map<String, String>> confirmEmailChangeOtp(
+            @Valid @RequestBody ConfirmEmailChangeOtpRequest request,
+            Principal principal) {
+        authService.confirmEmailChangeOtp(principal.getName(), request.getCode());
+        return ResponseEntity.ok(Map.of("message", "Code verified. A confirmation link has been sent to your new email address."));
+    }
+
+    /**
+     * Step 3 of email change: called when the user clicks the link in the new-email
+     * verification message.  Updates the email, revokes all sessions.
+     * Public endpoint — the token in the query param is the credential.
+     */
+    @GetMapping("/verify-new-email")
+    public ResponseEntity<Map<String, String>> verifyNewEmail(@RequestParam String token) {
+        authService.verifyNewEmail(token);
+        return ResponseEntity.ok(Map.of("message", "Email address updated successfully. Please log in with your new email."));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
