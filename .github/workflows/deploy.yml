@@ -147,12 +147,18 @@ jobs:
           username: ${{ secrets.NAS_USER }}
           key:      ${{ secrets.NAS_SSH_KEY }}
           port:     ${{ secrets.NAS_PORT }}
-          envs: GHCR_TOKEN,REPO_OWNER,DB_PASSWORD,JWT_SECRET,JWT_EXPIRATION,JWT_REFRESH_EXPIRATION,INTERNAL_SECRET,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL
+          envs: GHCR_TOKEN,REPO_OWNER,DB_PASSWORD,JWT_SECRET,JWT_EXPIRATION,JWT_REFRESH_EXPIRATION,INTERNAL_SECRET,ADMIN_EMAIL,ADMIN_PASSWORD,GRAFANA_PASSWORD,GRAFANA_PUBLIC_URL,SMTP_USERNAME,SMTP_PASSWORD,SMTP_FROM,FRONTEND_URL,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -e
 
-            # Authenticate to GHCR so private images can be pulled
+            # Authenticate to GHCR (private app images) and Docker Hub (public infra
+            # images: postgres, kafka, prometheus, grafana…). Docker Hub anonymous
+            # pulls are limited to 100/6 h per IP; logging in raises it to 200/6 h
+            # and avoids spurious "request canceled" timeouts on busy runners.
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$REPO_OWNER" --password-stdin
+            if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            fi
 
             cd "${{ secrets.NAS_DEPLOY_PATH }}"
 
@@ -190,6 +196,8 @@ jobs:
             echo "Deployment complete."
         env:
           GHCR_TOKEN:              ${{ secrets.GHCR_TOKEN }}
+          DOCKERHUB_USERNAME:      ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN:         ${{ secrets.DOCKERHUB_TOKEN }}
           REPO_OWNER:              ${{ github.repository_owner }}
           DB_PASSWORD:             ${{ secrets.DB_PASSWORD }}
           JWT_SECRET:              ${{ secrets.JWT_SECRET }}

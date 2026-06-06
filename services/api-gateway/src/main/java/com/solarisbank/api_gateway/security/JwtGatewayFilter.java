@@ -36,6 +36,10 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             "/api/v1/auth/resend-verification",
             "/api/v1/auth/forgot-password",
             "/api/v1/auth/reset-password",
+            // OTP flow — user has no JWT yet at this point in the login sequence;
+            // the session token is passed in the request body, not in Authorization.
+            "/api/v1/auth/verify-otp",
+            "/api/v1/auth/resend-otp",
             // Prometheus scraping and health probes — internal traffic only
             "/actuator/prometheus",
             "/actuator/health"
