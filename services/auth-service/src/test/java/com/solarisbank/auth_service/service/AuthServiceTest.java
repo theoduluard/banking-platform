@@ -8,6 +8,7 @@ import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.OtpChallenge;
 import com.solarisbank.auth_service.model.RefreshToken;
 import com.solarisbank.auth_service.model.User;
+import com.solarisbank.auth_service.repository.EmailChangeRequestRepository;
 import com.solarisbank.auth_service.repository.OtpChallengeRepository;
 import com.solarisbank.auth_service.repository.RefreshTokenRepository;
 import com.solarisbank.auth_service.repository.UserRepository;
@@ -57,6 +58,9 @@ class AuthServiceTest {
 
     @Mock
     private OtpChallengeRepository otpChallengeRepository;
+
+    @Mock
+    private EmailChangeRequestRepository emailChangeRequestRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -591,11 +595,14 @@ class AuthServiceTest {
                 .thenReturn(3);
         when(otpChallengeRepository.deleteByExpiresAtBefore(any(LocalDateTime.class)))
                 .thenReturn(2);
+        when(emailChangeRequestRepository.deleteByExpiresAtBeforeAndCompletedAtIsNull(any(LocalDateTime.class)))
+                .thenReturn(1);
 
         authService.cleanupExpiredTokens();
 
         verify(refreshTokenRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
         verify(otpChallengeRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
+        verify(emailChangeRequestRepository).deleteByExpiresAtBeforeAndCompletedAtIsNull(any(LocalDateTime.class));
     }
 
     // ── Helper — mirrors AuthService.sha256() ─────────────────────────────────
