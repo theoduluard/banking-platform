@@ -122,10 +122,13 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
       # Flyway — explicit overrides so these settings can never be accidentally
       # disabled by a stale env var in the .env file or the host environment.
+      # enabled: must be explicit — Spring Boot 4 FlywayAutoConfiguration
+      #   will NOT run if this property is absent and something else interferes.
       # repair-on-migrate: removes FAILED entries from flyway_schema_history before
       #   retrying, which self-heals a deployment that crashed mid-migration.
       # validate-on-migrate: disabled to tolerate IF-NOT-EXISTS rewrites to V1 SQL
       #   that change the checksum without changing the effective schema.
+      SPRING_FLYWAY_ENABLED:              "true"
       SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
       # SMTP — Brevo by default (override with any SMTP provider)
@@ -155,6 +158,7 @@ services:
       JWT_SECRET:                         ${JWT_SECRET}
       INTERNAL_SECRET:                    ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
+      SPRING_FLYWAY_ENABLED:              "true"
       SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
     networks:
@@ -177,6 +181,7 @@ services:
       ACCOUNT_SERVICE_URL:               http://account-service:8082
       INTERNAL_SECRET:                   ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO:     validate
+      SPRING_FLYWAY_ENABLED:             "true"
       SPRING_FLYWAY_REPAIR_ON_MIGRATE:   "true"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
     networks:
@@ -253,6 +258,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS:     kafka:9092
       INTERNAL_SECRET:                    ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO:      validate
+      SPRING_FLYWAY_ENABLED:              "true"
       SPRING_FLYWAY_REPAIR_ON_MIGRATE:    "true"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE:  "false"
     networks:
