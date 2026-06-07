@@ -147,7 +147,7 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.13</version>
+				<version>0.8.15</version>
 				<executions>
 					<!-- Instruments bytecode before tests run -->
 					<execution>
@@ -161,6 +161,17 @@
 						<goals><goal>report</goal></goals>
 					</execution>
 				</executions>
+				<configuration>
+					<excludes>
+						<exclude>**/*Application*</exclude>
+						<exclude>**/config/*Config*</exclude>
+						<exclude>**/kafka/config/**</exclude>
+						<exclude>**/config/Kafka*</exclude>
+						<exclude>**/config/Jackson*</exclude>
+						<exclude>**/config/Security*</exclude>
+						<exclude>**/config/Flyway*</exclude>
+					</excludes>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

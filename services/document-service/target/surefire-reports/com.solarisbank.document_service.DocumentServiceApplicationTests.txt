@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.solarisbank.document_service.DocumentServiceApplicationTests
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.533 s -- in com.solarisbank.document_service.DocumentServiceApplicationTests

@@ -7,6 +7,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.solarisbank.transaction_service.kafka.config.KafkaTopicConfig;
 import com.solarisbank.transaction_service.kafka.event.CreditRequestedEvent;
 import com.solarisbank.transaction_service.kafka.event.DebitRequestedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionCompletedEvent;
+import com.solarisbank.transaction_service.kafka.event.TransactionFailedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,6 +107,47 @@ class SagaEventProducerTest {
 
         verify(kafkaTemplate).send(
                 eq(KafkaTopicConfig.TOPIC_CREDIT_REQUESTED),
+                eq(transactionId.toString()),
+                startsWith("{"));
+    }
+
+    // ── publishTransactionCompleted ───────────────────────────────────────────
+
+    @Test
+    void publishTransactionCompleted_shouldSendToCorrectTopic() {
+        TransactionCompletedEvent event = TransactionCompletedEvent.builder()
+                .transactionId(transactionId)
+                .fromAccountId(accountId)
+                .toAccountId(UUID.randomUUID())
+                .senderUserId(userId)
+                .amount(amount)
+                .build();
+
+        producer.publishTransactionCompleted(event);
+
+        verify(kafkaTemplate).send(
+                eq(KafkaTopicConfig.TOPIC_TRANSACTION_COMPLETED),
+                eq(transactionId.toString()),
+                startsWith("{"));
+    }
+
+    // ── publishTransactionFailed ──────────────────────────────────────────────
+
+    @Test
+    void publishTransactionFailed_shouldSendToCorrectTopic() {
+        TransactionFailedEvent event = TransactionFailedEvent.builder()
+                .transactionId(transactionId)
+                .fromAccountId(accountId)
+                .toAccountId(UUID.randomUUID())
+                .senderUserId(userId)
+                .amount(amount)
+                .reason("Insufficient funds")
+                .build();
+
+        producer.publishTransactionFailed(event);
+
+        verify(kafkaTemplate).send(
+                eq(KafkaTopicConfig.TOPIC_TRANSACTION_FAILED),
                 eq(transactionId.toString()),
                 startsWith("{"));
     }

@@ -1,9 +1,0 @@
-com/solarisbank/analytics_service/config/FlywayConfig.class
-com/solarisbank/analytics_service/controller/AnalyticsController.class
-com/solarisbank/analytics_service/model/SpendingAggregate.class
-com/solarisbank/analytics_service/config/SecurityConfig.class
-com/solarisbank/analytics_service/config/KafkaConfig.class
-com/solarisbank/analytics_service/repository/SpendingAggregateRepository.class
-com/solarisbank/analytics_service/AnalyticsServiceApplication.class
-com/solarisbank/analytics_service/kafka/TransactionEventConsumer.class
-com/solarisbank/analytics_service/model/SpendingAggregate$SpendingAggregateBuilder.class
