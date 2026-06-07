@@ -1,33 +1,125 @@
+import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { removeToken, getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
 import axios from 'axios'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard, Users, Bell, MessageSquare, Settings, CreditCard, TrendingUp, Calculator, BarChart3, FileDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Logo from './Logo'
+import {
+  ArrowLeftRight, CalendarClock, PlusCircle, LogOut, LayoutDashboard,
+  Users, Bell, MessageSquare, Settings, CreditCard, TrendingUp,
+  Calculator, BarChart3, FileDown, Menu, X,
+} from 'lucide-react'
 
 const navLinks = [
-  { to: '/dashboard',            label: 'Tableau de bord',   icon: LayoutDashboard },
-  { to: '/transfer',             label: 'Virement',           icon: ArrowLeftRight },
-  { to: '/scheduled-transfers',  label: 'Programmés',          icon: CalendarClock },
-  { to: '/beneficiaries',        label: 'Bénéficiaires',       icon: Users },
-  { to: '/cards',                label: 'Cartes',             icon: CreditCard },
-  { to: '/loans',                label: 'Prêts',              icon: Calculator },
-  { to: '/analytics',            label: 'Analyses',           icon: BarChart3 },
-  { to: '/currency',             label: 'Devises',            icon: TrendingUp },
-  { to: '/documents',            label: 'Documents',          icon: FileDown },
-  { to: '/messages',        label: 'Messages',          icon: Bell },
-  { to: '/requests',        label: 'Demandes',          icon: MessageSquare },
-  { to: '/accounts/new',    label: 'Nouveau compte',   icon: PlusCircle },
-  { to: '/settings',        label: 'Paramètres',        icon: Settings },
+  { to: '/dashboard',           label: 'Tableau de bord',  icon: LayoutDashboard },
+  { to: '/transfer',            label: 'Virement',          icon: ArrowLeftRight },
+  { to: '/scheduled-transfers', label: 'Programmés',        icon: CalendarClock },
+  { to: '/beneficiaries',       label: 'Bénéficiaires',     icon: Users },
+  { to: '/cards',               label: 'Cartes',            icon: CreditCard },
+  { to: '/loans',               label: 'Prêts',             icon: Calculator },
+  { to: '/analytics',           label: 'Analyses',          icon: BarChart3 },
+  { to: '/currency',            label: 'Devises',           icon: TrendingUp },
+  { to: '/documents',           label: 'Documents',         icon: FileDown },
+  { to: '/messages',            label: 'Messages',          icon: Bell },
+  { to: '/requests',            label: 'Demandes',          icon: MessageSquare },
+  { to: '/accounts/new',        label: 'Nouveau compte',    icon: PlusCircle },
+  { to: '/settings',            label: 'Paramètres',        icon: Settings },
 ]
 
-export default function Navbar() {
-  const navigate     = useNavigate()
+// ── Sidebar content (shared between desktop & mobile drawer) ──────────────────
+function SidebarContent({
+  onClose,
+  unreadCount,
+  onLogout,
+}: {
+  onClose?: () => void
+  unreadCount: number
+  onLogout: () => void
+}) {
   const { pathname } = useLocation()
-  const userId       = getUserIdFromToken()
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Logo */}
+      <div className="flex items-center justify-between px-4 py-5">
+        <Link to="/dashboard" onClick={onClose}>
+          <Logo size={32} />
+        </Link>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+          >
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="mx-4 h-px bg-border/60" />
+
+      {/* Nav links */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <ul className="space-y-0.5">
+          {navLinks.map(({ to, label, icon: Icon }) => {
+            const active      = pathname === to || (to !== '/dashboard' && pathname.startsWith(to))
+            const isMessages  = to === '/messages'
+            const badge       = isMessages && unreadCount > 0
+
+            return (
+              <li key={to}>
+                <Link
+                  to={to}
+                  onClick={onClose}
+                  className={cn(
+                    'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                    active
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                  )}
+                >
+                  <Icon
+                    size={16}
+                    strokeWidth={active ? 2.2 : 1.8}
+                    className="shrink-0"
+                  />
+                  <span className="flex-1 truncate">{label}</span>
+                  {badge && (
+                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      {/* Divider */}
+      <div className="mx-4 h-px bg-border/60" />
+
+      {/* Logout */}
+      <div className="px-3 py-3">
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <LogOut size={16} strokeWidth={1.8} className="shrink-0" />
+          <span>Déconnexion</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+export default function Navbar() {
+  const navigate = useNavigate()
+  const userId   = getUserIdFromToken()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const { data: unread } = useQuery<{ count: number }>({
     queryKey: ['messages-unread', userId],
@@ -35,76 +127,59 @@ export default function Navbar() {
     enabled:  !!userId,
     refetchInterval: 60_000,
   })
+  const unreadCount = unread?.count ?? 0
 
   async function handleLogout() {
-    // Revoke the refresh token on the server before clearing local state.
-    // The HttpOnly cookie is sent automatically (withCredentials) so no token
-    // needs to be passed in the body.  Errors are silently ignored so a network
-    // blip never leaves the user stuck on the current page.
     try {
       await axios.post(
         `${import.meta.env.VITE_API_URL}/api/v1/auth/logout`,
         {},
         { withCredentials: true },
       )
-    } catch {
-      // Best-effort — always clear local state regardless
-    }
+    } catch { /* best-effort */ }
     removeToken()
     navigate('/login')
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-card/90 backdrop-blur-md shadow-sm">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+    <>
+      {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
+      <aside className="hidden md:flex md:w-56 md:flex-col md:border-r md:border-border/60 md:bg-card">
+        <SidebarContent unreadCount={unreadCount} onLogout={handleLogout} />
+      </aside>
 
-        {/* Brand */}
-        <Link to="/dashboard" className="shrink-0">
-          <Logo size={32} />
+      {/* ── Mobile top bar ────────────────────────────────────────────────── */}
+      <header className="flex items-center justify-between border-b border-border/60 bg-card px-4 py-3 md:hidden">
+        <Link to="/dashboard">
+          <Logo size={28} />
         </Link>
-
-        {/* Nav links — Link is the flex container directly (no asChild) */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map(({ to, label, icon: Icon }) => {
-            const active      = pathname === to
-            const isMessages  = to === '/messages'
-            const badge       = isMessages && (unread?.count ?? 0) > 0
-
-            return (
-              <Link
-                key={to}
-                to={to}
-                className={cn(
-                  buttonVariants({ variant: 'ghost', size: 'sm' }),
-                  'relative h-9 gap-2 px-3 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-primary/10 text-primary hover:bg-primary/15'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
-                <span>{label}</span>
-                {badge && (
-                  <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-                    {unread!.count > 9 ? '9+' : unread!.count}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </nav>
-
-        {/* Logout */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLogout}
-          className="h-9 gap-2 px-3 text-sm text-muted-foreground hover:text-destructive"
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Ouvrir le menu"
         >
-          <LogOut size={15} />
-          <span className="hidden sm:inline shrink-0">Déconnexion</span>
-        </Button>
-      </div>
-    </header>
+          <Menu size={20} />
+        </button>
+      </header>
+
+      {/* ── Mobile drawer overlay ─────────────────────────────────────────── */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Drawer */}
+          <aside className="absolute inset-y-0 left-0 w-64 bg-card shadow-2xl">
+            <SidebarContent
+              onClose={() => setMobileOpen(false)}
+              unreadCount={unreadCount}
+              onLogout={handleLogout}
+            />
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

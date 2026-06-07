@@ -597,6 +597,17 @@ class AccountServiceTest {
                 .hasMessageContaining("not active");
     }
 
+    @Test
+    void adminWithdrawal_shouldThrowNotFound_whenAccountMissing() {
+        when(accountRepository.findWithLockById(accountId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.adminWithdrawal(accountId, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account not found")
+                .extracting(ex -> ((BusinessException) ex).getStatus())
+                .isEqualTo(org.springframework.http.HttpStatus.NOT_FOUND);
+    }
+
     // ── debitFromSaga ──────────────────────────────────────────────────────────
 
     @Test
