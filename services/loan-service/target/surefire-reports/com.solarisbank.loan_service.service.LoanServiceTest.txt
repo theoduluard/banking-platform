@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.solarisbank.loan_service.service.LoanServiceTest
+-------------------------------------------------------------------------------
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.135 s -- in com.solarisbank.loan_service.service.LoanServiceTest

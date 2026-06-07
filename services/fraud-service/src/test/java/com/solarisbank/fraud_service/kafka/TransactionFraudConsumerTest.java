@@ -45,7 +45,8 @@ class TransactionFraudConsumerTest {
     void consume_highAmount_shouldCreateHighAmountAlert() {
         when(repo.save(any(FraudAlert.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        consumer.consume(buildMessage("TRANSFER_COMPLETED", "15000"));
+        // 15001 triggers HIGH_AMOUNT (>10000) but is NOT a round number, so only one rule fires
+        consumer.consume(buildMessage("TRANSFER_COMPLETED", "15001"));
 
         ArgumentCaptor<FraudAlert> captor = ArgumentCaptor.forClass(FraudAlert.class);
         verify(repo).save(captor.capture());
@@ -54,7 +55,7 @@ class TransactionFraudConsumerTest {
         assertThat(alert.getRuleTriggered()).isEqualTo("HIGH_AMOUNT");
         assertThat(alert.getRiskScore()).isEqualTo((short) 75);
         assertThat(alert.getStatus()).isEqualTo(FraudAlert.AlertStatus.OPEN);
-        assertThat(alert.getAmount()).isEqualByComparingTo("15000");
+        assertThat(alert.getAmount()).isEqualByComparingTo("15001");
         assertThat(alert.getUserId()).isEqualTo(USER_ID);
     }
 

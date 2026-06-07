@@ -38,7 +38,8 @@ class DocumentServiceTest {
     @BeforeEach
     void setUp() {
         documentService = new DocumentService(docRepo, pdfService);
-        when(docRepo.save(any(GeneratedDocument.class))).thenAnswer(inv -> inv.getArgument(0));
+        // lenient: this stub is needed for generateRib tests but not for getDocumentsForUser tests
+        lenient().when(docRepo.save(any(GeneratedDocument.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
     // ── generateRib ───────────────────────────────────────────────────────────

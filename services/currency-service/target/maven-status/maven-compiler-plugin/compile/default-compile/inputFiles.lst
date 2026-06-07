@@ -1,0 +1,7 @@
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/CurrencyServiceApplication.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/config/FlywayConfig.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/config/SecurityConfig.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/controller/CurrencyController.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/model/ExchangeRate.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/repository/ExchangeRateRepository.java
+/Users/tduluard/Dev/banking-platform/services/currency-service/src/main/java/com/solarisbank/currency_service/service/CurrencyService.java

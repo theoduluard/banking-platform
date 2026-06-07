@@ -1,0 +1,3 @@
+/Users/tduluard/Dev/banking-platform/services/fraud-service/src/test/java/com/solarisbank/fraud_service/FraudServiceApplicationTests.java
+/Users/tduluard/Dev/banking-platform/services/fraud-service/src/test/java/com/solarisbank/fraud_service/controller/FraudControllerTest.java
+/Users/tduluard/Dev/banking-platform/services/fraud-service/src/test/java/com/solarisbank/fraud_service/kafka/TransactionFraudConsumerTest.java

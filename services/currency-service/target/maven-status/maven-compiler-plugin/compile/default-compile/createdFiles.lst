@@ -1,0 +1,8 @@
+com/solarisbank/currency_service/model/ExchangeRate$ExchangeRateBuilder.class
+com/solarisbank/currency_service/config/SecurityConfig.class
+com/solarisbank/currency_service/controller/CurrencyController.class
+com/solarisbank/currency_service/repository/ExchangeRateRepository.class
+com/solarisbank/currency_service/model/ExchangeRate.class
+com/solarisbank/currency_service/config/FlywayConfig.class
+com/solarisbank/currency_service/CurrencyServiceApplication.class
+com/solarisbank/currency_service/service/CurrencyService.class

@@ -1,0 +1,3 @@
+com/solarisbank/analytics_service/kafka/TransactionEventConsumerTest.class
+com/solarisbank/analytics_service/controller/AnalyticsControllerTest.class
+com/solarisbank/analytics_service/AnalyticsServiceApplicationTests.class

@@ -1,0 +1,8 @@
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/DocumentServiceApplication.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/config/FlywayConfig.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/config/SecurityConfig.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/controller/DocumentController.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/model/GeneratedDocument.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/repository/GeneratedDocumentRepository.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/service/DocumentService.java
+/Users/tduluard/Dev/banking-platform/services/document-service/src/main/java/com/solarisbank/document_service/service/PdfGenerationService.java

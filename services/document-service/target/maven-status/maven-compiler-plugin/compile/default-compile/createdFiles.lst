@@ -1,0 +1,9 @@
+com/solarisbank/document_service/service/PdfGenerationService.class
+com/solarisbank/document_service/model/GeneratedDocument.class
+com/solarisbank/document_service/config/FlywayConfig.class
+com/solarisbank/document_service/DocumentServiceApplication.class
+com/solarisbank/document_service/model/GeneratedDocument$GeneratedDocumentBuilder.class
+com/solarisbank/document_service/service/DocumentService.class
+com/solarisbank/document_service/config/SecurityConfig.class
+com/solarisbank/document_service/repository/GeneratedDocumentRepository.class
+com/solarisbank/document_service/controller/DocumentController.class

@@ -1,0 +1,8 @@
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/AnalyticsServiceApplication.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/config/FlywayConfig.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/config/KafkaConfig.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/config/SecurityConfig.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/controller/AnalyticsController.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/kafka/TransactionEventConsumer.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/model/SpendingAggregate.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/main/java/com/solarisbank/analytics_service/repository/SpendingAggregateRepository.java

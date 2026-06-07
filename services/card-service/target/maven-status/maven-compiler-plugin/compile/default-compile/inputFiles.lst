@@ -1,0 +1,9 @@
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/CardServiceApplication.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/config/FlywayConfig.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/config/SecurityConfig.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/controller/CardController.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/dto/CardResponse.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/dto/CreateCardRequest.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/model/Card.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/repository/CardRepository.java
+/Users/tduluard/Dev/banking-platform/services/card-service/src/main/java/com/solarisbank/card_service/service/CardService.java

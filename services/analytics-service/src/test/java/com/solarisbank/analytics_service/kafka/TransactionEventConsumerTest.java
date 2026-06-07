@@ -32,11 +32,11 @@ class TransactionEventConsumerTest {
     @BeforeEach
     void setUp() {
         consumer = new TransactionEventConsumer(repo);
-        // Default: no existing aggregate
-        when(repo.findByUserIdAndAccountIdAndYearAndMonthAndCategory(
+        // Default: no existing aggregate — lenient because skipping tests don't hit the repo
+        lenient().when(repo.findByUserIdAndAccountIdAndYearAndMonthAndCategory(
                 any(), any(), anyShort(), anyShort(), anyString()))
                 .thenReturn(Optional.empty());
-        when(repo.save(any(SpendingAggregate.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(repo.save(any(SpendingAggregate.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
     private String msg(String type, String extra) {

@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.solarisbank.document_service.controller.DocumentControllerTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.393 s -- in com.solarisbank.document_service.controller.DocumentControllerTest

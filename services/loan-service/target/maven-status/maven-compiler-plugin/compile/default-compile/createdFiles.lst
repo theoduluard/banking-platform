@@ -1,0 +1,14 @@
+com/solarisbank/loan_service/dto/LoanSimulationResponse$LoanSimulationResponseBuilder.class
+com/solarisbank/loan_service/model/Loan$LoanStatus.class
+com/solarisbank/loan_service/LoanServiceApplication.class
+com/solarisbank/loan_service/dto/LoanSimulationResponse.class
+com/solarisbank/loan_service/model/Loan.class
+com/solarisbank/loan_service/dto/LoanApplicationRequest.class
+com/solarisbank/loan_service/service/LoanService.class
+com/solarisbank/loan_service/config/SecurityConfig.class
+com/solarisbank/loan_service/model/Loan$LoanBuilder.class
+com/solarisbank/loan_service/controller/LoanController.class
+com/solarisbank/loan_service/controller/AdminLoanController.class
+com/solarisbank/loan_service/config/FlywayConfig.class
+com/solarisbank/loan_service/repository/LoanRepository.class
+com/solarisbank/loan_service/dto/LoanSimulationRequest.class

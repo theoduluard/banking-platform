@@ -1,0 +1,9 @@
+com/solarisbank/audit_service/kafka/AuditEventConsumer.class
+com/solarisbank/audit_service/config/SecurityConfig.class
+com/solarisbank/audit_service/controller/AuditController.class
+com/solarisbank/audit_service/model/AuditEvent.class
+com/solarisbank/audit_service/repository/AuditEventRepository.class
+com/solarisbank/audit_service/config/FlywayConfig.class
+com/solarisbank/audit_service/config/KafkaConfig.class
+com/solarisbank/audit_service/model/AuditEvent$AuditEventBuilder.class
+com/solarisbank/audit_service/AuditServiceApplication.class

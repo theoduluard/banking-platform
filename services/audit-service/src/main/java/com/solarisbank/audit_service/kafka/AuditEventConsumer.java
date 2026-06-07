@@ -42,6 +42,10 @@ public class AuditEventConsumer {
     }
 
     private void persist(String message, String source, String entityType) {
+        if (message == null || message.isBlank()) {
+            log.warn("Received blank message from {} — skipping", source);
+            return;
+        }
         try {
             JsonNode node = objectMapper.readTree(message);
             String eventType = node.path("type").asText("UNKNOWN");

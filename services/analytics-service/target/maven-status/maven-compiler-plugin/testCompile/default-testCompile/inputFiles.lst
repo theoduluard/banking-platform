@@ -1,0 +1,3 @@
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/test/java/com/solarisbank/analytics_service/AnalyticsServiceApplicationTests.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/test/java/com/solarisbank/analytics_service/controller/AnalyticsControllerTest.java
+/Users/tduluard/Dev/banking-platform/services/analytics-service/src/test/java/com/solarisbank/analytics_service/kafka/TransactionEventConsumerTest.java
