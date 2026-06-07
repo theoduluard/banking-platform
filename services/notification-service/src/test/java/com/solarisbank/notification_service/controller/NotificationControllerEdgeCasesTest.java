@@ -20,7 +20,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Edge-case coverage for NotificationController:
- * - invalid (non-UUID) value in X-User-Id header → 400
+ * - invalid (non-UUID) value in X-User-Id header → 401
+ *   InternalRequestFilter validates the UUID format before the request reaches
+ *   the controller; an unparseable value is treated as "no valid user" and
+ *   rejected with 401 (same as a missing header).
  * - markRead when notification not found → 404
  */
 @WebMvcTest(controllers = {NotificationController.class, GlobalExceptionHandler.class})
@@ -35,34 +38,34 @@ class NotificationControllerEdgeCasesTest {
     private static final UUID USER_ID  = UUID.randomUUID();
     private static final UUID NOTIF_ID = UUID.randomUUID();
 
-    // ── extractUserId — invalid UUID ───────────────────────────────────────────
+    // ── InternalRequestFilter — invalid UUID is rejected as 401 ──────────────
 
     @Test
-    void getNotifications_shouldReturn400_whenXUserIdIsNotAValidUuid() throws Exception {
+    void getNotifications_shouldReturn401_whenXUserIdIsNotAValidUuid() throws Exception {
         mockMvc.perform(get("/api/v1/notifications")
                         .header("X-User-Id", "not-a-uuid"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void getUnreadCount_shouldReturn400_whenXUserIdIsNotAValidUuid() throws Exception {
+    void getUnreadCount_shouldReturn401_whenXUserIdIsNotAValidUuid() throws Exception {
         mockMvc.perform(get("/api/v1/notifications/unread-count")
                         .header("X-User-Id", "invalid-id"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void markRead_shouldReturn400_whenXUserIdIsNotAValidUuid() throws Exception {
+    void markRead_shouldReturn401_whenXUserIdIsNotAValidUuid() throws Exception {
         mockMvc.perform(patch("/api/v1/notifications/{id}/read", NOTIF_ID)
                         .header("X-User-Id", "bad-uuid"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void markAllRead_shouldReturn400_whenXUserIdIsNotAValidUuid() throws Exception {
+    void markAllRead_shouldReturn401_whenXUserIdIsNotAValidUuid() throws Exception {
         mockMvc.perform(patch("/api/v1/notifications/read-all")
                         .header("X-User-Id", "xyz"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     // ── markRead — 404 ─────────────────────────────────────────────────────────
