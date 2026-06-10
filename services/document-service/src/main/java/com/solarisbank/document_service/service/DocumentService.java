@@ -5,9 +5,6 @@ import com.solarisbank.document_service.repository.GeneratedDocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
@@ -32,6 +29,9 @@ public class DocumentService {
     @Value("${account.service.url:http://localhost:8082}")
     private String accountServiceUrl;
 
+    @Value("${auth.service.url:http://localhost:8081}")
+    private String authServiceUrl;
+
     @Transactional
     public byte[] generateRib(UUID userId, UUID accountId, String internalSecret) throws IOException {
         // Fetch account details from account-service
@@ -48,13 +48,28 @@ public class DocumentService {
             if (account != null) {
                 accountData.put("iban", String.valueOf(account.getOrDefault("iban", "FR76 XXXX XXXX XXXX XXXX XXXX XXX")));
                 accountData.put("accountNumber", String.valueOf(account.getOrDefault("accountNumber", accountId.toString().substring(0, 8).toUpperCase())));
-                Object owner = account.get("ownerName");
-                accountData.put("ownerName", owner != null ? String.valueOf(owner) : "N/A");
             }
         } catch (Exception e) {
             log.warn("Could not fetch account details for RIB — using placeholder data: {}", e.getMessage());
             accountData.put("iban", "FR76 XXXX XXXX XXXX XXXX XXXX XXX");
             accountData.put("accountNumber", accountId.toString().substring(0, 8).toUpperCase());
+        }
+
+        // Fetch user name from auth-service
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> userInfo = restClient.get()
+                    .uri(authServiceUrl + "/api/v1/internal/users/" + userId)
+                    .header("X-Internal-Secret", internalSecret)
+                    .retrieve()
+                    .body(Map.class);
+            if (userInfo != null && userInfo.get("fullName") != null) {
+                accountData.put("ownerName", String.valueOf(userInfo.get("fullName")));
+            } else {
+                accountData.put("ownerName", "N/A");
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch user info for RIB — falling back to N/A: {}", e.getMessage());
             accountData.put("ownerName", "N/A");
         }
         accountData.put("bic", "SLRSFRPPXXX");

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getUserIdFromToken } from '@/lib/auth'
 import api from '@/lib/api'
+import type { Account } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -152,10 +153,18 @@ export default function CardsPage() {
   const [open, setOpen] = useState(false)
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [accountId, setAccountId]         = useState('')
+  const [accountId, setAccountId]           = useState('')
   const [cardholderName, setCardholderName] = useState('')
-  const [cardType, setCardType]           = useState<'VIRTUAL' | 'PHYSICAL'>('VIRTUAL')
-  const [spendingLimit, setSpendingLimit] = useState('')
+  const [cardType, setCardType]             = useState<'VIRTUAL' | 'PHYSICAL'>('VIRTUAL')
+  const [spendingLimit, setSpendingLimit]   = useState('')
+
+  // ── Fetch accounts (for dropdown) ──────────────────────────────────────────
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ['accounts'],
+    queryFn: () => api.get<Account[]>('/api/v1/accounts').then(r => r.data),
+    enabled: !!userId,
+  })
+  const activeAccounts = accounts.filter(a => a.status === 'ACTIVE')
 
   // ── Fetch cards ────────────────────────────────────────────────────────────
   const { data: cards = [], isLoading } = useQuery<BankCard[]>({
@@ -213,12 +222,12 @@ export default function CardsPage() {
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (!accountId.trim() || !cardholderName.trim()) {
+    if (!accountId || !cardholderName.trim()) {
       toast.error('Veuillez remplir tous les champs obligatoires')
       return
     }
     const body: Parameters<typeof createMutation.mutate>[0] = {
-      accountId: accountId.trim(),
+      accountId,
       cardholderName: cardholderName.trim(),
       cardType,
     }
@@ -306,15 +315,26 @@ export default function CardsPage() {
 
           <form onSubmit={handleCreate} className="space-y-4 py-1">
             <div className="space-y-2">
-              <Label htmlFor="accountId">ID du compte</Label>
-              <Input
+              <Label htmlFor="accountId">Compte</Label>
+              <select
                 id="accountId"
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
-                placeholder="UUID du compte"
-                className="h-11 font-mono text-sm"
                 required
-              />
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+              >
+                <option value="" disabled>Sélectionner un compte…</option>
+                {activeAccounts.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.type === 'CHECKING' ? 'Compte courant' : 'Compte épargne'}
+                    {' — '}
+                    {a.iban.slice(0, 8)}···{a.iban.slice(-4)}
+                  </option>
+                ))}
+                {activeAccounts.length === 0 && (
+                  <option value="" disabled>Aucun compte actif disponible</option>
+                )}
+              </select>
             </div>
 
             <div className="space-y-2">

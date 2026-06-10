@@ -138,6 +138,7 @@ services:
       SMTP_PASSWORD:                      ${SMTP_PASSWORD:-}
       SMTP_FROM:                          ${SMTP_FROM:-noreply@solarisbank.demo}
       FRONTEND_URL:                       ${FRONTEND_URL:-http://localhost:5173}
+      INTERNAL_SECRET:                    ${INTERNAL_SECRET}
     networks:
       - banking-net
 
@@ -535,6 +536,7 @@ services:
       SPRING_DATASOURCE_USERNAME:    solaris
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       ACCOUNT_SERVICE_URL:           http://account-service:8082
+      AUTH_SERVICE_URL:              http://auth-service:8081
       INTERNAL_SECRET:               ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_FLYWAY_ENABLED:         "true"

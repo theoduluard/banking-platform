@@ -39,6 +39,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").permitAll()
+                        // Internal service-to-service calls — security enforced by X-Internal-Secret
+                        .requestMatchers("/api/v1/internal/**").permitAll()
                         // Prometheus scraping and health probes — no auth required
                         .requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
                         .anyRequest().authenticated()

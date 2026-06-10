@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import { getUserIdFromToken } from '@/lib/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -179,7 +180,7 @@ function CategoryRow({
 
 // ── Monthly spending section ───────────────────────────────────────────────────
 
-function MonthlySpending({ year, month }: { year: number; month: number }) {
+function MonthlySpending({ year, month, userId }: { year: number; month: number; userId: string | null }) {
   const { data, isLoading, isError } = useQuery<MonthlySpendingResponse>({
     queryKey: ['analytics', 'monthly', year, month],
     queryFn: async () => {
@@ -187,6 +188,7 @@ function MonthlySpending({ year, month }: { year: number; month: number }) {
       return res.data
     },
     staleTime: 2 * 60 * 1000,
+    enabled: !!userId,
   })
 
   const categories = data?.categories ?? []
@@ -254,7 +256,7 @@ function MonthlySpending({ year, month }: { year: number; month: number }) {
 
 // ── Spending history section ───────────────────────────────────────────────────
 
-function SpendingHistory() {
+function SpendingHistory({ userId }: { userId: string | null }) {
   const { data, isLoading, isError } = useQuery<SpendingHistoryResponse>({
     queryKey: ['analytics', 'history'],
     queryFn: async () => {
@@ -262,6 +264,7 @@ function SpendingHistory() {
       return res.data
     },
     staleTime: 5 * 60 * 1000,
+    enabled: !!userId,
   })
 
   const history = data?.history ?? []
@@ -363,6 +366,7 @@ function SpendingHistory() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
+  const userId = getUserIdFromToken()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1) // 1-indexed
@@ -430,7 +434,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Monthly spending */}
-      <MonthlySpending year={year} month={month} />
+      <MonthlySpending year={year} month={month} userId={userId} />
 
       {/* Spending history toggle */}
       <div>
@@ -449,7 +453,7 @@ export default function AnalyticsPage() {
 
         {showHistory && (
           <div className="mt-4">
-            <SpendingHistory />
+            <SpendingHistory userId={userId} />
           </div>
         )}
       </div>
