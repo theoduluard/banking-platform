@@ -48,6 +48,18 @@ public class AccountController {
         return ResponseEntity.ok(accountService.getMyAccounts(userId));
     }
 
+    /**
+     * Returns only the user's CHECKING accounts.
+     * Called by the frontend when the user opens the "create a card" form,
+     * so they can pick an account from a dropdown instead of typing a UUID.
+     */
+    @GetMapping("/checking")
+    public ResponseEntity<List<AccountResponse>> getCheckingAccounts(
+            @RequestHeader("X-User-Id") UUID userId) {
+
+        return ResponseEntity.ok(accountService.getCheckingAccounts(userId));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<AccountResponse> getAccount(
             @PathVariable UUID id,

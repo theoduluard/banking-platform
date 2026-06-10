@@ -1,7 +1,10 @@
 package com.solarisbank.card_service.service;
 
+import com.solarisbank.card_service.client.AccountClient;
+import com.solarisbank.card_service.client.AccountResponse;
 import com.solarisbank.card_service.dto.CardResponse;
 import com.solarisbank.card_service.dto.CreateCardRequest;
+import com.solarisbank.card_service.exception.BusinessException;
 import com.solarisbank.card_service.model.Card;
 import com.solarisbank.card_service.repository.CardRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,23 +33,36 @@ class CardServiceTest {
     @Mock
     private CardRepository cardRepository;
 
+    @Mock
+    private AccountClient accountClient;
+
     @InjectMocks
     private CardService cardService;
 
     private UUID userId;
     private UUID cardId;
+    private UUID accountId;
 
     @BeforeEach
     void setUp() {
-        userId = UUID.randomUUID();
-        cardId = UUID.randomUUID();
+        userId    = UUID.randomUUID();
+        cardId    = UUID.randomUUID();
+        accountId = UUID.randomUUID();
+    }
+
+    /** Helper — returns an ACTIVE CHECKING account by default. */
+    private AccountResponse checkingAccount() {
+        AccountResponse acc = new AccountResponse();
+        acc.setType("CHECKING");
+        acc.setStatus("ACTIVE");
+        return acc;
     }
 
     private Card buildCard(Card.CardStatus status) {
         return Card.builder()
                 .id(cardId)
                 .userId(userId)
-                .accountId(UUID.randomUUID())
+                .accountId(accountId)
                 .cardNumber("4370123456789012")
                 .maskedNumber("**** **** **** 9012")
                 .cardholderName("John Doe")
@@ -64,11 +81,12 @@ class CardServiceTest {
     @Test
     void createCard_withVirtualType_shouldSaveAndReturnResponse() {
         CreateCardRequest req = new CreateCardRequest();
-        req.setAccountId(UUID.randomUUID());
+        req.setAccountId(accountId);
         req.setCardType("VIRTUAL");
         req.setCardholderName("Jane Doe");
         req.setSpendingLimit(new BigDecimal("500.00"));
 
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(checkingAccount());
         Card saved = buildCard(Card.CardStatus.ACTIVE);
         saved.setCardType(Card.CardType.VIRTUAL);
         when(cardRepository.save(any(Card.class))).thenReturn(saved);
@@ -90,10 +108,11 @@ class CardServiceTest {
     @Test
     void createCard_withPhysicalType_shouldSetPhysicalType() {
         CreateCardRequest req = new CreateCardRequest();
-        req.setAccountId(UUID.randomUUID());
+        req.setAccountId(accountId);
         req.setCardType("PHYSICAL");
         req.setCardholderName("Alice");
 
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(checkingAccount());
         Card saved = buildCard(Card.CardStatus.ACTIVE);
         saved.setCardType(Card.CardType.PHYSICAL);
         when(cardRepository.save(any(Card.class))).thenReturn(saved);
@@ -108,9 +127,10 @@ class CardServiceTest {
     @Test
     void createCard_withNullCardType_defaultsToVirtual() {
         CreateCardRequest req = new CreateCardRequest();
-        req.setAccountId(UUID.randomUUID());
+        req.setAccountId(accountId);
         req.setCardType(null);
 
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(checkingAccount());
         Card saved = buildCard(Card.CardStatus.ACTIVE);
         when(cardRepository.save(any(Card.class))).thenReturn(saved);
 
@@ -124,9 +144,10 @@ class CardServiceTest {
     @Test
     void createCard_withNullCardholderName_defaultsToCardHolder() {
         CreateCardRequest req = new CreateCardRequest();
-        req.setAccountId(UUID.randomUUID());
+        req.setAccountId(accountId);
         req.setCardholderName(null);
 
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(checkingAccount());
         Card saved = buildCard(Card.CardStatus.ACTIVE);
         when(cardRepository.save(any(Card.class))).thenReturn(saved);
 
@@ -140,8 +161,9 @@ class CardServiceTest {
     @Test
     void createCard_expirySetThreeYearsInFuture() {
         CreateCardRequest req = new CreateCardRequest();
-        req.setAccountId(UUID.randomUUID());
+        req.setAccountId(accountId);
 
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(checkingAccount());
         Card saved = buildCard(Card.CardStatus.ACTIVE);
         when(cardRepository.save(any(Card.class))).thenReturn(saved);
 
@@ -151,6 +173,42 @@ class CardServiceTest {
         verify(cardRepository).save(captor.capture());
         int expectedYear = java.time.LocalDate.now().plusYears(3).getYear();
         assertThat(captor.getValue().getExpiryYear()).isEqualTo((short) expectedYear);
+    }
+
+    // ── createCard — account type validation ──────────────────────────────────
+
+    @Test
+    void createCard_savingsAccount_shouldThrowUnprocessableEntity() {
+        CreateCardRequest req = new CreateCardRequest();
+        req.setAccountId(accountId);
+
+        AccountResponse savings = new AccountResponse();
+        savings.setType("SAVINGS");
+        savings.setStatus("ACTIVE");
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(savings);
+
+        assertThatThrownBy(() -> cardService.createCard(userId, req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("CHECKING");
+
+        verify(cardRepository, never()).save(any());
+    }
+
+    @Test
+    void createCard_inactiveAccount_shouldThrowUnprocessableEntity() {
+        CreateCardRequest req = new CreateCardRequest();
+        req.setAccountId(accountId);
+
+        AccountResponse blocked = new AccountResponse();
+        blocked.setType("CHECKING");
+        blocked.setStatus("BLOCKED");
+        when(accountClient.getAccount(eq(accountId), eq(userId))).thenReturn(blocked);
+
+        assertThatThrownBy(() -> cardService.createCard(userId, req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("ACTIVE");
+
+        verify(cardRepository, never()).save(any());
     }
 
     // ── getCardsForUser ────────────────────────────────────────────────────────

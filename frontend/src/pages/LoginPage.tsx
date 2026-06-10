@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import PasswordInput from '@/components/ui/password-input'
 import Logo from '@/components/Logo'
-import type { OtpChallengeResponse } from '@/types'
+import type { OtpChallengeResponse, AuthResponse } from '@/types'
+import { setToken, setRole } from '@/lib/auth'
 
 const schema = z.object({
   email:    z.string().email('Email invalide'),
@@ -42,10 +43,18 @@ export default function LoginPage() {
     setUnverifiedEmail(null)
     setLoginError(null)
     try {
-      const res = await api.post<OtpChallengeResponse>('/api/v1/auth/login', data)
-      // Store the session token so OtpVerificationPage can pick it up
-      sessionStorage.setItem('otpSessionToken', res.data.sessionToken)
-      navigate('/verify-otp')
+      const res = await api.post<OtpChallengeResponse | AuthResponse>('/api/v1/auth/login', data)
+
+      if ('accessToken' in res.data) {
+        // ADMIN — OTP bypassed, JWT returned directly
+        setToken(res.data.accessToken)
+        setRole(res.data.role)
+        navigate('/dashboard')
+      } else {
+        // CLIENT — OTP required
+        sessionStorage.setItem('otpSessionToken', res.data.sessionToken)
+        navigate('/verify-otp')
+      }
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status

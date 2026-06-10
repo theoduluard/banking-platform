@@ -21,6 +21,13 @@ import { Calculator, Clock, CheckCircle2, XCircle, TrendingUp } from 'lucide-rea
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface CheckingAccount {
+  id: string
+  iban: string
+  balance: number
+  status: string
+}
+
 interface SimulationResult {
   monthlyPayment: number
   totalRepayment: number
@@ -137,6 +144,13 @@ export default function LoansPage() {
   const [accountId, setAccountId]   = useState('')
   const [purpose, setPurpose]       = useState('')
 
+  // ── Fetch checking accounts (for the loan application dropdown) ────────────
+  const { data: checkingAccounts = [] } = useQuery<CheckingAccount[]>({
+    queryKey: ['accounts', 'checking'],
+    queryFn:  () => api.get<CheckingAccount[]>('/api/v1/accounts/checking').then(r => r.data),
+    enabled:  !!userId,
+  })
+
   // ── Fetch loans ────────────────────────────────────────────────────────────
   const { data: loans = [], isLoading } = useQuery<Loan[]>({
     queryKey: ['loans', userId],
@@ -194,8 +208,8 @@ export default function LoansPage() {
 
   function handleApply(e: React.FormEvent) {
     e.preventDefault()
-    if (!accountId.trim()) {
-      toast.error('Veuillez renseigner l\'ID du compte')
+    if (!accountId) {
+      toast.error('Veuillez sélectionner un compte courant')
       return
     }
     if (!simResult) return
@@ -383,15 +397,28 @@ export default function LoansPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="applyAccountId">ID du compte</Label>
-              <Input
+              <Label htmlFor="applyAccountId">Compte courant</Label>
+              <select
                 id="applyAccountId"
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
-                placeholder="UUID du compte à créditer"
-                className="h-11 font-mono text-sm"
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 required
-              />
+              >
+                <option value="">— Sélectionner un compte —</option>
+                {checkingAccounts
+                  .filter(a => a.status === 'ACTIVE')
+                  .map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.iban} — {a.balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                    </option>
+                  ))}
+              </select>
+              {checkingAccounts.filter(a => a.status === 'ACTIVE').length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Aucun compte courant actif disponible.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

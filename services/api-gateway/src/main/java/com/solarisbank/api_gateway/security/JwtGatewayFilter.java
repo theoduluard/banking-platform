@@ -42,6 +42,12 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
             "/api/v1/auth/resend-otp",
             // Email-change step 3 — user clicks a link from their inbox (no JWT).
             "/api/v1/auth/verify-new-email",
+            // Currency rates and conversion are public — no personal data involved.
+            // The frontend shows exchange rates before login (e.g. on the home page).
+            "/api/v1/currencies/rates",
+            "/api/v1/currencies/convert",
+            // Loan simulation is public — users can estimate repayments before signing up.
+            "/api/v1/loans/simulate",
             // Prometheus scraping and health probes — internal traffic only
             "/actuator/prometheus",
             "/actuator/health"

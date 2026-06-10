@@ -59,6 +59,16 @@ public class AccountService {
                 .stream().map(this::toResponse).toList();
     }
 
+    /**
+     * Returns only the CHECKING accounts for the given user.
+     * Used by the frontend to populate the account selector when creating a card.
+     * Card creation is restricted to CHECKING accounts.
+     */
+    public List<AccountResponse> getCheckingAccounts(UUID userId) {
+        return accountRepository.findByUserIdAndType(userId, Account.Type.CHECKING)
+                .stream().map(this::toResponse).toList();
+    }
+
     public AccountResponse getAccount(UUID accountId, UUID userId) {
         return accountRepository.findByAccountIdAndUserId(accountId, userId)
                 .map(this::toResponse)

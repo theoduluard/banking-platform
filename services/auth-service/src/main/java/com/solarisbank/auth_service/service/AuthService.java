@@ -99,8 +99,13 @@ public class AuthService {
      * </ul>
      * The counter resets to 0 on the first successful authentication.
      */
+    /**
+     * Returns either an {@link OtpChallengeResponse} (CLIENT users — OTP required)
+     * or a {@link LoginResponse} (ADMIN users — OTP bypassed, JWT issued directly).
+     * The controller inspects the runtime type to decide whether to set the cookie.
+     */
     @Transactional
-    public OtpChallengeResponse login(LoginRequest request) {
+    public Object login(LoginRequest request) {
         // Look up the user first so we can check / update the lockout state.
         // We intentionally do this before calling authenticationManager so that a
         // locked account short-circuits immediately without a DB password-hash comparison.
@@ -152,6 +157,14 @@ public class AuthService {
 
         if (!Boolean.TRUE.equals(user.getIsActive())) {
             throw new BusinessException("Account is disabled", HttpStatus.UNAUTHORIZED);
+        }
+
+        // Admin accounts skip the OTP step entirely — password is sufficient.
+        // OTP adds friction without extra security for a back-office account
+        // whose inbox is already protected by the admin's own credentials.
+        if (user.getRole() == User.Role.ADMIN) {
+            log.info("[Login] Admin user id={} — OTP bypassed, JWT issued directly", user.getUserId());
+            return buildLoginResponse(user);
         }
 
         // Replace any previous pending challenge for this user

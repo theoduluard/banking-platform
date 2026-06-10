@@ -154,7 +154,7 @@ class AuthServiceTest {
         when(otpChallengeRepository.save(any(OtpChallenge.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        OtpChallengeResponse response = authService.login(loginRequest);
+        OtpChallengeResponse response = (OtpChallengeResponse) authService.login(loginRequest);
 
         assertThat(response).isNotNull();
         assertThat(response.getStatus()).isEqualTo("OTP_REQUIRED");
@@ -162,6 +162,39 @@ class AuthServiceTest {
         verify(otpChallengeRepository).deleteByUser(savedUser);
         verify(otpChallengeRepository).save(any(OtpChallenge.class));
         verify(emailService).sendOtpEmail(eq("john.doe@example.com"), eq("John"), anyString());
+    }
+
+    @Test
+    void login_adminUser_shouldSkipOtpAndReturnLoginResponse() {
+        User adminUser = User.builder()
+                .userId(java.util.UUID.randomUUID())
+                .email("admin@solarisbank.com")
+                .firstname("Admin")
+                .lastname("User")
+                .password("$2a$10$hashed")
+                .role(User.Role.ADMIN)
+                .emailVerified(true)
+                .isActive(true)
+                .failedLoginAttempts(0)
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(null);
+        when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(adminUser));
+        when(jwtService.generateAccessToken(any(), any(), any())).thenReturn("admin-jwt-token");
+        when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Object result = authService.login(loginRequest);
+
+        // Admin: should return LoginResponse directly, no OTP challenge
+        assertThat(result).isInstanceOf(LoginResponse.class);
+        LoginResponse lr = (LoginResponse) result;
+        assertThat(lr.getAccessToken()).isEqualTo("admin-jwt-token");
+        assertThat(lr.getRole()).isEqualTo("ADMIN");
+
+        // OTP pipeline must NOT have been invoked
+        verify(otpChallengeRepository, never()).save(any(OtpChallenge.class));
+        verify(emailService, never()).sendOtpEmail(any(), any(), any());
     }
 
     @Test

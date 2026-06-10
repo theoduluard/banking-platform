@@ -1,10 +1,14 @@
 package com.solarisbank.card_service.service;
 
+import com.solarisbank.card_service.client.AccountClient;
+import com.solarisbank.card_service.client.AccountResponse;
 import com.solarisbank.card_service.dto.CardResponse;
 import com.solarisbank.card_service.dto.CreateCardRequest;
+import com.solarisbank.card_service.exception.BusinessException;
 import com.solarisbank.card_service.model.Card;
 import com.solarisbank.card_service.repository.CardRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,10 +23,26 @@ import java.util.UUID;
 public class CardService {
 
     private final CardRepository cardRepository;
+    private final AccountClient accountClient;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
     public CardResponse createCard(UUID userId, CreateCardRequest req) {
+        // Verify the account exists, belongs to the user, and is a CHECKING account.
+        AccountResponse account = accountClient.getAccount(req.getAccountId(), userId);
+        if (!"CHECKING".equals(account.getType())) {
+            throw new BusinessException(
+                "Cards can only be issued for CHECKING accounts. " +
+                "Account " + req.getAccountId() + " is of type " + account.getType() + ".",
+                HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (!"ACTIVE".equals(account.getStatus())) {
+            throw new BusinessException(
+                "Cards can only be issued for ACTIVE accounts. " +
+                "Account " + req.getAccountId() + " has status " + account.getStatus() + ".",
+                HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
         String cardNumber = generateCardNumber();
         String masked = maskCardNumber(cardNumber);
         LocalDate expiry = LocalDate.now().plusYears(3);

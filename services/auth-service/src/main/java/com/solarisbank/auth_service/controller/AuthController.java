@@ -52,14 +52,30 @@ public class AuthController {
     }
 
     /**
-     * Step 1 of 2FA login: validates credentials, sends a 6-digit OTP by email, and
-     * returns an opaque session token the frontend uses to identify the challenge.
-     * The actual JWT is issued only after the OTP is verified (see /verify-otp).
+     * Step 1 of login.
+     * <ul>
+     *   <li><b>CLIENT users</b>: returns {@code {status:"OTP_REQUIRED", sessionToken:"…"}}
+     *       — the frontend navigates to /verify-otp.</li>
+     *   <li><b>ADMIN users</b>: OTP is bypassed — returns the full
+     *       {@code {accessToken, email, …}} directly and sets the HttpOnly
+     *       refresh-token cookie, exactly like /verify-otp does for clients.</li>
+     * </ul>
      */
     @PostMapping("/login")
-    public ResponseEntity<OtpChallengeResponse> login(@Valid @RequestBody LoginRequest request) {
-        OtpChallengeResponse challenge = authService.login(request);
-        return ResponseEntity.ok(challenge);
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        Object result = authService.login(request);
+
+        if (result instanceof LoginResponse loginResponse) {
+            // ADMIN direct login — issue cookie + return JWT body
+            ResponseCookie cookie = buildRefreshCookie(loginResponse.getRefreshToken());
+            loginResponse.setRefreshToken(null);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                    .body(loginResponse);
+        }
+
+        // CLIENT — OTP challenge
+        return ResponseEntity.ok(result);
     }
 
     /**
