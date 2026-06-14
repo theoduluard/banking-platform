@@ -60,6 +60,15 @@ public class JwtGatewayFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
+        // CORS preflight — browsers send OPTIONS without an Authorization header.
+        // The actual CORS headers are handled by CorsConfig; the JWT filter must
+        // let these through unconditionally, or the browser will see a 401 and
+        // block every subsequent authenticated request to that endpoint.
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
 
         if (PUBLIC_PATHS.stream().anyMatch(path::startsWith)) {

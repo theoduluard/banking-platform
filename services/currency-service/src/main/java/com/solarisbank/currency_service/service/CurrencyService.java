@@ -22,11 +22,17 @@ public class CurrencyService {
         return repo.findByBaseCurrencyOrderByTargetCurrencyAsc(base.toUpperCase());
     }
 
+    public BigDecimal getRate(String from, String to) {
+        if (from.equalsIgnoreCase(to)) return BigDecimal.ONE;
+        return repo.findByBaseCurrencyAndTargetCurrency(from.toUpperCase(), to.toUpperCase())
+                .map(ExchangeRate::getRate)
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported currency pair: " + from + "/" + to));
+    }
+
     public BigDecimal convert(String from, String to, BigDecimal amount) {
         if (from.equalsIgnoreCase(to)) return amount;
-        ExchangeRate rate = repo.findByBaseCurrencyAndTargetCurrency(from.toUpperCase(), to.toUpperCase())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported currency pair: " + from + "/" + to));
-        return amount.multiply(rate.getRate()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal rate = getRate(from, to);
+        return amount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional

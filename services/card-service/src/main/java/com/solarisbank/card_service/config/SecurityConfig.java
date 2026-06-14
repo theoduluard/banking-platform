@@ -19,7 +19,9 @@ public class SecurityConfig {
                 // Authentication is performed via JWT Bearer tokens sent in the
                 // Authorization header — not via session cookies — so CSRF attacks
                 // cannot be mounted against this service.
-                .csrf(AbstractHttpConfigurer::disable) // lgtm[java/spring-disabled-csrf-protection]
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable) // lgtm[java/spring-disabled-csrf-protection]
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
