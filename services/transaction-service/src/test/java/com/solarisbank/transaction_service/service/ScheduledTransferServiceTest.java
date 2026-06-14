@@ -6,7 +6,9 @@ import com.solarisbank.transaction_service.dto.ScheduledTransferRequest;
 import com.solarisbank.transaction_service.dto.ScheduledTransferResponse;
 import com.solarisbank.transaction_service.exception.BusinessException;
 import com.solarisbank.transaction_service.model.ScheduledTransfer;
+import com.solarisbank.transaction_service.model.Transaction;
 import com.solarisbank.transaction_service.repository.ScheduledTransferRepository;
+import com.solarisbank.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,6 +34,7 @@ import static org.mockito.Mockito.*;
 class ScheduledTransferServiceTest {
 
     @Mock private ScheduledTransferRepository scheduledTransferRepository;
+    @Mock private TransactionRepository       transactionRepository;
     @Mock private AccountClient               accountClient;
 
     @InjectMocks private ScheduledTransferService scheduledTransferService;
@@ -44,6 +48,10 @@ class ScheduledTransferServiceTest {
 
     @BeforeEach
     void setUp() {
+        // @Lazy @Autowired self-injection is not handled by @InjectMocks —
+        // inject it manually so executeScheduledTransfers() can call self.executeOne().
+        ReflectionTestUtils.setField(scheduledTransferService, "self", scheduledTransferService);
+
         userId        = UUID.randomUUID();
         fromAccountId = UUID.randomUUID();
         toAccountId   = UUID.randomUUID();
