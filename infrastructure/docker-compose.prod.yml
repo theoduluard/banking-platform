@@ -409,6 +409,7 @@ services:
       SPRING_DATASOURCE_USERNAME:    solaris
       SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ACCOUNT_SERVICE_URL:           http://account-service:8082
       INTERNAL_SECRET:               ${INTERNAL_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_FLYWAY_ENABLED:         "true"

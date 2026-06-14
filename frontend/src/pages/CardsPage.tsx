@@ -24,6 +24,7 @@ import { CreditCard, Snowflake, Flame, PlusCircle, Lock } from 'lucide-react'
 
 interface BankCard {
   id: string
+  accountId: string
   maskedNumber: string
   cardholderName: string
   cardType: 'VIRTUAL' | 'PHYSICAL'
@@ -153,18 +154,18 @@ export default function CardsPage() {
   const [open, setOpen] = useState(false)
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [accountId, setAccountId]           = useState('')
-  const [cardholderName, setCardholderName] = useState('')
-  const [cardType, setCardType]             = useState<'VIRTUAL' | 'PHYSICAL'>('VIRTUAL')
-  const [spendingLimit, setSpendingLimit]   = useState('')
+  const [accountId, setAccountId]         = useState('')
+  const [cardType, setCardType]           = useState<'VIRTUAL' | 'PHYSICAL'>('VIRTUAL')
+  const [spendingLimit, setSpendingLimit] = useState('')
 
   // ── Fetch accounts (for dropdown) ──────────────────────────────────────────
   const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<Account[]>('/api/v1/accounts').then(r => r.data),
+    queryKey: ['accounts', userId],
+    queryFn: () => api.get<Account[]>('/api/v1/accounts', {
+      headers: { 'X-User-Id': userId },
+    }).then(r => r.data),
     enabled: !!userId,
   })
-  const activeAccounts = accounts.filter(a => a.status === 'ACTIVE')
 
   // ── Fetch cards ────────────────────────────────────────────────────────────
   const { data: cards = [], isLoading } = useQuery<BankCard[]>({
@@ -172,6 +173,14 @@ export default function CardsPage() {
     queryFn:  () => api.get<BankCard[]>('/api/v1/cards').then(r => r.data),
     enabled:  !!userId,
   })
+
+  // Comptes courants actifs qui n'ont pas encore de carte (active ou gelée)
+  const cardedAccountIds = new Set(
+    cards.filter(c => c.status !== 'CANCELLED').map(c => c.accountId)
+  )
+  const eligibleAccounts = accounts.filter(
+    a => a.status === 'ACTIVE' && a.type === 'CHECKING' && !cardedAccountIds.has(a.id)
+  )
 
   // ── Freeze ─────────────────────────────────────────────────────────────────
   const freezeMutation = useMutation({
@@ -197,7 +206,6 @@ export default function CardsPage() {
   const createMutation = useMutation({
     mutationFn: (body: {
       accountId: string
-      cardholderName: string
       cardType: 'VIRTUAL' | 'PHYSICAL'
       spendingLimit?: number
     }) => api.post<BankCard>('/api/v1/cards', body).then(r => r.data),
@@ -215,20 +223,18 @@ export default function CardsPage() {
   function closeDialog() {
     setOpen(false)
     setAccountId('')
-    setCardholderName('')
     setCardType('VIRTUAL')
     setSpendingLimit('')
   }
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (!accountId || !cardholderName.trim()) {
-      toast.error('Veuillez remplir tous les champs obligatoires')
+    if (!accountId) {
+      toast.error('Veuillez sélectionner un compte')
       return
     }
     const body: Parameters<typeof createMutation.mutate>[0] = {
       accountId,
-      cardholderName: cardholderName.trim(),
       cardType,
     }
     if (spendingLimit !== '') {
@@ -251,10 +257,12 @@ export default function CardsPage() {
             Gérez vos cartes bancaires virtuelles et physiques.
           </p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-          <PlusCircle size={15} />
-          Nouvelle carte
-        </Button>
+        {eligibleAccounts.length > 0 && (
+          <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+            <PlusCircle size={15} />
+            Nouvelle carte
+          </Button>
+        )}
       </div>
 
       {/* ── Loading ───────────────────────────────────────────────────────── */}
@@ -277,10 +285,12 @@ export default function CardsPage() {
               <p className="text-sm font-medium">Aucune carte</p>
               <p className="mt-0.5 text-xs">Créez votre première carte pour commencer.</p>
             </div>
-            <Button size="sm" variant="outline" className="gap-1.5 mt-1" onClick={() => setOpen(true)}>
-              <PlusCircle size={14} />
-              Nouvelle carte
-            </Button>
+            {eligibleAccounts.length > 0 && (
+              <Button size="sm" variant="outline" className="gap-1.5 mt-1" onClick={() => setOpen(true)}>
+                <PlusCircle size={14} />
+                Nouvelle carte
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -315,7 +325,7 @@ export default function CardsPage() {
 
           <form onSubmit={handleCreate} className="space-y-4 py-1">
             <div className="space-y-2">
-              <Label htmlFor="accountId">Compte</Label>
+              <Label htmlFor="accountId">Compte courant</Label>
               <select
                 id="accountId"
                 value={accountId}
@@ -324,29 +334,15 @@ export default function CardsPage() {
                 className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
               >
                 <option value="" disabled>Sélectionner un compte…</option>
-                {activeAccounts.map(a => (
+                {eligibleAccounts.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.type === 'CHECKING' ? 'Compte courant' : 'Compte épargne'}
-                    {' — '}
-                    {a.iban.slice(0, 8)}···{a.iban.slice(-4)}
+                    Compte courant — {a.iban.slice(0, 8)}···{a.iban.slice(-4)}
                   </option>
                 ))}
-                {activeAccounts.length === 0 && (
-                  <option value="" disabled>Aucun compte actif disponible</option>
-                )}
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cardholderName">Titulaire</Label>
-              <Input
-                id="cardholderName"
-                value={cardholderName}
-                onChange={e => setCardholderName(e.target.value)}
-                placeholder="Prénom NOM"
-                className="h-11"
-                required
-              />
+              <p className="text-[11px] text-muted-foreground">
+                Seuls les comptes courants sans carte active sont éligibles.
+              </p>
             </div>
 
             <div className="space-y-2">
