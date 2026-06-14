@@ -4,6 +4,9 @@ import com.solarisbank.loan_service.dto.*;
 import com.solarisbank.loan_service.model.Loan;
 import com.solarisbank.loan_service.repository.LoanRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +64,11 @@ public class LoanService {
     // Admin operations
     public List<Loan> getPendingLoans() {
         return loanRepository.findByStatusOrderByCreatedAtDesc(Loan.LoanStatus.PENDING);
+    }
+
+    public Page<Loan> getAllLoans(int page, int size) {
+        return loanRepository.findAllByOrderByCreatedAtDesc(
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
     }
 
     @Transactional

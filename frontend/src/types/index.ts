@@ -232,3 +232,24 @@ export interface AdminTransaction {
   createdAt: string
   completedAt: string | null
 }
+
+// ── Loans ─────────────────────────────────────────────────────────────────────
+
+export type LoanStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISBURSED' | 'CLOSED'
+
+export interface AdminLoan {
+  id: string
+  userId: string
+  accountId: string
+  amount: number
+  interestRate: number
+  durationMonths: number
+  monthlyPayment: number
+  totalRepayment: number
+  status: LoanStatus
+  purpose: string | null
+  adminNote: string | null
+  disbursedAt: string | null
+  createdAt: string
+  updatedAt: string
+}

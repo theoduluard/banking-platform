@@ -49,6 +49,16 @@ services:
     ports:
       - "5441:5432"
 
+  postgres-cards:
+    image: postgres:16
+    container_name: postgres-cards
+    environment:
+      POSTGRES_DB: cards_db
+      POSTGRES_USER: solaris
+      POSTGRES_PASSWORD: solaris123
+    ports:
+      - "5440:5432"
+
   kafka:
     image: apache/kafka:latest
     container_name: kafka

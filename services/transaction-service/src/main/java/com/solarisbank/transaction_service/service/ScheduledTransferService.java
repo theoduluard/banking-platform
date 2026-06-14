@@ -6,15 +6,20 @@ import com.solarisbank.transaction_service.dto.ScheduledTransferRequest;
 import com.solarisbank.transaction_service.dto.ScheduledTransferResponse;
 import com.solarisbank.transaction_service.exception.BusinessException;
 import com.solarisbank.transaction_service.model.ScheduledTransfer;
+import com.solarisbank.transaction_service.model.Transaction;
 import com.solarisbank.transaction_service.repository.ScheduledTransferRepository;
+import com.solarisbank.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,7 +29,17 @@ import java.util.UUID;
 public class ScheduledTransferService {
 
     private final ScheduledTransferRepository scheduledTransferRepository;
+    private final TransactionRepository       transactionRepository;
     private final AccountClient               accountClient;
+
+    /**
+     * Self-injection through the Spring proxy so that @Transactional on executeOne()
+     * is actually honoured. Calling this.executeOne() directly bypasses the proxy and
+     * makes the annotation a no-op — self.executeOne() goes through it correctly.
+     */
+    @Lazy
+    @Autowired
+    private ScheduledTransferService self;
 
     // ── Create ─────────────────────────────────────────────────────────────────
 
@@ -110,7 +125,7 @@ public class ScheduledTransferService {
         log.info("[Scheduler] Processing {} due scheduled transfers", due.size());
 
         for (ScheduledTransfer transfer : due) {
-            executeOne(transfer);
+            self.executeOne(transfer);   // via proxy so @Transactional is applied
         }
     }
 
@@ -121,11 +136,26 @@ public class ScheduledTransferService {
                     transfer.getInitiatedByUserId(), transfer.getAmount());
             accountClient.credit(transfer.getToAccountId(), transfer.getAmount());
 
+            // Record the transfer in the transaction history so the user can see it
+            transactionRepository.save(Transaction.builder()
+                    .fromAccountId(transfer.getFromAccountId())
+                    .toAccountId(transfer.getToAccountId())
+                    .initiatedByUserId(transfer.getInitiatedByUserId())
+                    .amount(transfer.getAmount())
+                    .currency(transfer.getCurrency())
+                    .type(Transaction.Type.TRANSFER)
+                    .status(Transaction.Status.COMPLETED)
+                    .description(transfer.getDescription() != null && !transfer.getDescription().isBlank()
+                            ? "[Programmé] " + transfer.getDescription()
+                            : "[Virement programmé]")
+                    .completedAt(LocalDateTime.now())
+                    .build());
+
             // Advance to the next execution date
             transfer.setNextExecutionDate(nextDate(transfer));
             scheduledTransferRepository.save(transfer);
 
-            log.info("[Scheduler] Executed scheduled transfer {} ({}  {})",
+            log.info("[Scheduler] Executed scheduled transfer {} ({} {})",
                     transfer.getId(), transfer.getAmount(), transfer.getCurrency());
 
         } catch (Exception e) {

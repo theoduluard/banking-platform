@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Bell,
   MessageSquare,
+  Banknote,
 } from 'lucide-react'
 
 const sidebarLinks = [
@@ -21,6 +22,7 @@ const sidebarLinks = [
   { to: '/admin/users',        label: 'Utilisateurs',    icon: Users },
   { to: '/admin/accounts',     label: 'Comptes',         icon: CreditCard },
   { to: '/admin/transactions', label: 'Transactions',    icon: ArrowLeftRight },
+  { to: '/admin/loans',        label: 'Prêts',           icon: Banknote },
   { to: '/admin/messages',     label: 'Messages',        icon: Bell },
   { to: '/admin/requests',     label: 'Demandes',        icon: MessageSquare },
 ]

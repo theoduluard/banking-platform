@@ -36,6 +36,7 @@ import AdminAccountsPage     from '@/pages/admin/AdminAccountsPage'
 import AdminTransactionsPage from '@/pages/admin/AdminTransactionsPage'
 import AdminMessagesPage     from '@/pages/admin/AdminMessagesPage'
 import AdminRequestsPage     from '@/pages/admin/AdminRequestsPage'
+import AdminLoansPage        from '@/pages/admin/AdminLoansPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/admin/users"        element={<AdminUsersPage />} />
             <Route path="/admin/accounts"     element={<AdminAccountsPage />} />
             <Route path="/admin/transactions" element={<AdminTransactionsPage />} />
+            <Route path="/admin/loans"        element={<AdminLoansPage />} />
             <Route path="/admin/messages"     element={<AdminMessagesPage />} />
             <Route path="/admin/requests"     element={<AdminRequestsPage />} />
           </Route>
