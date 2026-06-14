@@ -184,7 +184,6 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="jean@example.com"
                 className="h-11"
                 {...register('email', { onChange: () => setLoginError(null) })}
               />
