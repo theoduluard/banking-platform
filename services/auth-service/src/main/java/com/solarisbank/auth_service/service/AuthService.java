@@ -378,6 +378,7 @@ public class AuthService {
      * Explicit logout truly invalidates the session,
      * eliminating the 7-day residual validity window.
      */
+    @Transactional
     public void logout(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             return;
