@@ -558,6 +558,11 @@ export default function TransferPage() {
                   onChange={e => setFirstExecDate(e.target.value)}
                   className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                 />
+                {firstExecDate === new Date().toISOString().split('T')[0] && (
+                  <p className="text-[10px] text-primary leading-tight">
+                    ⚡ Exécution immédiate à la création
+                  </p>
+                )}
               </div>
             </div>
           )}

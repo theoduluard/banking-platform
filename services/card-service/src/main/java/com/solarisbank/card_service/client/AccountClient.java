@@ -28,14 +28,28 @@ public class AccountClient {
                 .defaultStatusHandler(
                     status -> status.is4xxClientError() || status.is5xxServerError(),
                     (req, res) -> {
-                        String msg = "Account service error";
+                        int statusCode = res.getStatusCode().value();
+                        String msg;
                         try {
                             @SuppressWarnings("unchecked")
                             Map<String, Object> body = objectMapper.readValue(
                                     res.getBody().readAllBytes(), Map.class);
-                            if (body.containsKey("error")) msg = (String) body.get("error");
-                        } catch (Exception ignored) {}
-                        throw new BusinessException(msg, HttpStatus.valueOf(res.getStatusCode().value()));
+                            // If the account-service itself returned 401, it means the
+                            // card-service is misconfigured (wrong ACCOUNT_SERVICE_URL) or
+                            // the X-Internal-Secret is invalid. Surface a diagnostic message.
+                            if (statusCode == 401) {
+                                msg = "Account service authentication failed — check ACCOUNT_SERVICE_URL and INTERNAL_SECRET configuration";
+                            } else {
+                                msg = body.containsKey("error")
+                                        ? (String) body.get("error")
+                                        : "Account service error";
+                            }
+                        } catch (Exception ignored) {
+                            msg = statusCode == 401
+                                    ? "Account service authentication failed — check ACCOUNT_SERVICE_URL configuration"
+                                    : "Account service error";
+                        }
+                        throw new BusinessException(msg, HttpStatus.valueOf(statusCode));
                     }
                 )
                 .build();

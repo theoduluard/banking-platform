@@ -126,6 +126,11 @@ export default function Navbar() {
     queryFn:  () => api.get<{ count: number }>('/api/v1/messages/unread-count').then(r => r.data),
     enabled:  !!userId,
     refetchInterval: 60_000,
+    // Don't retry on error — if the messaging service is down it will be polled
+    // again at the next interval (60 s) without spamming the console.
+    retry: false,
+    // Never throw into an error boundary for this non-critical background poll.
+    throwOnError: false,
   })
   const unreadCount = unread?.count ?? 0
 

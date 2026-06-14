@@ -73,7 +73,19 @@ public class ScheduledTransferService {
                 transfer.getId(), userId, request.getAmount(),
                 request.getFrequency(), request.getFirstExecutionDate());
 
-        return toResponse(transfer);
+        // If the first execution date is today or already in the past (e.g., the daily
+        // scheduler at 09:00 UTC already ran), execute the transfer immediately so the
+        // user doesn't have to wait until the next morning.
+        // executeOne() advances nextExecutionDate to the next period, so the scheduler
+        // will NOT double-execute it tomorrow.
+        if (!request.getFirstExecutionDate().isAfter(LocalDate.now())) {
+            log.info("[Scheduled] First execution date {} is today or past — executing immediately",
+                    request.getFirstExecutionDate());
+            self.executeOne(transfer);
+        }
+
+        // Reload to reflect any date advancement done by executeOne()
+        return toResponse(scheduledTransferRepository.findById(transfer.getId()).orElse(transfer));
     }
 
     // ── List ───────────────────────────────────────────────────────────────────
