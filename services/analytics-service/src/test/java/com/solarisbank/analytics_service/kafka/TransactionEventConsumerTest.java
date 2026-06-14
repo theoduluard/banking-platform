@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,6 +19,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * Tests for TransactionEventConsumer — consumes "transaction.completed" events
+ * published by transaction-service after the debit-credit saga completes.
+ *
+ * Event shape:
+ * {
+ *   "transactionId":   "...",
+ *   "fromAccountId":   "...",   // debited account
+ *   "toAccountId":     "...",   // credited account
+ *   "senderUserId":    "...",   // user who initiated
+ *   "recipientUserId": "...",   // owner of destination account
+ *   "amount":          "100.00",
+ *   "currency":        "EUR",
+ *   "completedAt":     "2026-06-15T10:00:00"
+ * }
+ */
 @ExtendWith(MockitoExtension.class)
 class TransactionEventConsumerTest {
 
@@ -26,78 +43,102 @@ class TransactionEventConsumerTest {
 
     private TransactionEventConsumer consumer;
 
-    private final UUID USER_ID    = UUID.randomUUID();
-    private final UUID ACCOUNT_ID = UUID.randomUUID();
+    private final UUID SENDER_USER_ID    = UUID.randomUUID();
+    private final UUID RECIPIENT_USER_ID = UUID.randomUUID();
+    private final UUID FROM_ACCOUNT_ID   = UUID.randomUUID();
+    private final UUID TO_ACCOUNT_ID     = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
         consumer = new TransactionEventConsumer(repo);
-        // Default: no existing aggregate — lenient because skipping tests don't hit the repo
         lenient().when(repo.findByUserIdAndAccountIdAndYearAndMonthAndCategory(
                 any(), any(), anyShort(), anyShort(), anyString()))
                 .thenReturn(Optional.empty());
         lenient().when(repo.save(any(SpendingAggregate.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
-    private String msg(String type, String extra) {
-        return "{\"type\":\"%s\",\"userId\":\"%s\",\"accountId\":\"%s\"%s}"
-                .formatted(type, USER_ID, ACCOUNT_ID, extra);
+    /** Builds a valid transaction.completed JSON event. */
+    private String event(String amount) {
+        return """
+                {
+                  "transactionId":   "%s",
+                  "fromAccountId":   "%s",
+                  "toAccountId":     "%s",
+                  "senderUserId":    "%s",
+                  "recipientUserId": "%s",
+                  "amount":          "%s",
+                  "currency":        "EUR",
+                  "completedAt":     "2026-06-%02dT10:00:00"
+                }
+                """.formatted(
+                UUID.randomUUID(), FROM_ACCOUNT_ID, TO_ACCOUNT_ID,
+                SENDER_USER_ID, RECIPIENT_USER_ID,
+                amount, LocalDate.now().getDayOfMonth());
     }
 
-    // ── DEBIT ─────────────────────────────────────────────────────────────────
+    // ── Debit entry ───────────────────────────────────────────────────────────
 
     @Test
-    void consume_debit_shouldSaveNewAggregateWithDebitAmount() {
-        consumer.consume(msg("DEBIT", ",\"amount\":\"200.00\""));
+    void consume_shouldSaveDebitEntryForSender() {
+        consumer.consume(event("200.00"));
 
         ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        SpendingAggregate agg = captor.getValue();
+        verify(repo, atLeastOnce()).save(captor.capture());
 
-        assertThat(agg.getUserId()).isEqualTo(USER_ID);
-        assertThat(agg.getAccountId()).isEqualTo(ACCOUNT_ID);
-        assertThat(agg.getTotalDebit()).isEqualByComparingTo("200.00");
-        assertThat(agg.getTotalCredit()).isEqualByComparingTo("0");
-        assertThat(agg.getTxCount()).isEqualTo(1);
-        assertThat(agg.getCategory()).isEqualTo("OTHER");
-        assertThat(agg.getYear()).isEqualTo((short) LocalDate.now().getYear());
-        assertThat(agg.getMonth()).isEqualTo((short) LocalDate.now().getMonthValue());
+        SpendingAggregate debitAgg = captor.getAllValues().stream()
+                .filter(a -> a.getUserId().equals(SENDER_USER_ID))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No debit aggregate saved for sender"));
+
+        assertThat(debitAgg.getAccountId()).isEqualTo(FROM_ACCOUNT_ID);
+        assertThat(debitAgg.getTotalDebit()).isEqualByComparingTo("200.00");
+        assertThat(debitAgg.getTotalCredit()).isEqualByComparingTo("0");
+        assertThat(debitAgg.getTxCount()).isEqualTo(1);
+        assertThat(debitAgg.getCategory()).isEqualTo("Virement");
+        assertThat(debitAgg.getYear()).isEqualTo((short) LocalDate.now().getYear());
+        assertThat(debitAgg.getMonth()).isEqualTo((short) LocalDate.now().getMonthValue());
     }
 
-    // ── CREDIT ────────────────────────────────────────────────────────────────
+    // ── Credit entry ──────────────────────────────────────────────────────────
 
     @Test
-    void consume_credit_shouldSaveNewAggregateWithCreditAmount() {
-        consumer.consume(msg("CREDIT", ",\"amount\":\"500.00\""));
+    void consume_shouldSaveCreditEntryForRecipient() {
+        consumer.consume(event("500.00"));
 
         ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        SpendingAggregate agg = captor.getValue();
+        verify(repo, atLeastOnce()).save(captor.capture());
 
-        assertThat(agg.getTotalCredit()).isEqualByComparingTo("500.00");
-        assertThat(agg.getTotalDebit()).isEqualByComparingTo("0");
+        SpendingAggregate creditAgg = captor.getAllValues().stream()
+                .filter(a -> a.getUserId().equals(RECIPIENT_USER_ID))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No credit aggregate saved for recipient"));
+
+        assertThat(creditAgg.getAccountId()).isEqualTo(TO_ACCOUNT_ID);
+        assertThat(creditAgg.getTotalCredit()).isEqualByComparingTo("500.00");
+        assertThat(creditAgg.getTotalDebit()).isEqualByComparingTo("0");
+        assertThat(creditAgg.getTxCount()).isEqualTo(1);
+        assertThat(creditAgg.getCategory()).isEqualTo("Virement");
     }
 
-    // ── TRANSFER_COMPLETED ────────────────────────────────────────────────────
+    // ── Two saves per event ───────────────────────────────────────────────────
 
     @Test
-    void consume_transferCompleted_countsAsDebit() {
-        consumer.consume(msg("TRANSFER_COMPLETED", ",\"amount\":\"1000.00\""));
+    void consume_shouldSaveTwoAggregatesPerEvent() {
+        consumer.consume(event("100.00"));
 
-        ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        assertThat(captor.getValue().getTotalDebit()).isEqualByComparingTo("1000.00");
+        // One debit save + one credit save
+        verify(repo, times(2)).save(any(SpendingAggregate.class));
     }
 
-    // ── Existing aggregate accumulation ───────────────────────────────────────
+    // ── Accumulation on existing aggregate ────────────────────────────────────
 
     @Test
-    void consume_existingAggregate_shouldAccumulateAndIncrementTxCount() {
+    void consume_existingDebitAggregate_shouldAccumulateAndIncrementTxCount() {
         SpendingAggregate existing = SpendingAggregate.builder()
-                .userId(USER_ID).accountId(ACCOUNT_ID)
+                .userId(SENDER_USER_ID).accountId(FROM_ACCOUNT_ID)
                 .year((short) LocalDate.now().getYear())
                 .month((short) LocalDate.now().getMonthValue())
-                .category("OTHER")
+                .category("Virement")
                 .totalDebit(new BigDecimal("100.00"))
                 .totalCredit(BigDecimal.ZERO)
                 .txCount(2)
@@ -105,57 +146,43 @@ class TransactionEventConsumerTest {
                 .build();
 
         when(repo.findByUserIdAndAccountIdAndYearAndMonthAndCategory(
-                eq(USER_ID), eq(ACCOUNT_ID), anyShort(), anyShort(), eq("OTHER")))
+                eq(SENDER_USER_ID), eq(FROM_ACCOUNT_ID), anyShort(), anyShort(), eq("Virement")))
                 .thenReturn(Optional.of(existing));
 
-        consumer.consume(msg("DEBIT", ",\"amount\":\"50.00\""));
+        consumer.consume(event("50.00"));
 
         ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        SpendingAggregate saved = captor.getValue();
+        verify(repo, atLeastOnce()).save(captor.capture());
+
+        SpendingAggregate saved = captor.getAllValues().stream()
+                .filter(a -> a.getUserId().equals(SENDER_USER_ID))
+                .findFirst().orElseThrow();
 
         assertThat(saved.getTotalDebit()).isEqualByComparingTo("150.00");
         assertThat(saved.getTxCount()).isEqualTo(3);
     }
 
-    // ── Category field ────────────────────────────────────────────────────────
+    // ── Missing required fields ───────────────────────────────────────────────
 
     @Test
-    void consume_withExplicitCategory_shouldUseItInLookupAndAggregate() {
-        consumer.consume(msg("DEBIT", ",\"amount\":\"99.99\",\"category\":\"GROCERIES\""));
+    void consume_missingSenderUserId_shouldSkipAndNotSave() {
+        consumer.consume("""
+                {"fromAccountId":"%s","toAccountId":"%s","amount":"50.00"}
+                """.formatted(FROM_ACCOUNT_ID, TO_ACCOUNT_ID));
 
-        ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        assertThat(captor.getValue().getCategory()).isEqualTo("GROCERIES");
-
-        verify(repo).findByUserIdAndAccountIdAndYearAndMonthAndCategory(
-                eq(USER_ID), eq(ACCOUNT_ID), anyShort(), anyShort(), eq("GROCERIES"));
-    }
-
-    @Test
-    void consume_missingCategory_shouldDefaultToOther() {
-        consumer.consume(msg("DEBIT", ",\"amount\":\"10.00\""));
-
-        ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
-        verify(repo).save(captor.capture());
-        assertThat(captor.getValue().getCategory()).isEqualTo("OTHER");
-    }
-
-    // ── Unknown / filtered types ───────────────────────────────────────────────
-
-    @Test
-    void consume_unknownType_shouldSkipAndNotSave() {
-        consumer.consume(msg("REFUND", ",\"amount\":\"50.00\""));
         verify(repo, never()).save(any());
     }
 
     @Test
-    void consume_loginType_shouldSkipAndNotSave() {
-        consumer.consume("{\"type\":\"LOGIN\",\"userId\":\"" + USER_ID + "\"}");
+    void consume_missingFromAccountId_shouldSkipAndNotSave() {
+        consumer.consume("""
+                {"senderUserId":"%s","toAccountId":"%s","amount":"50.00"}
+                """.formatted(SENDER_USER_ID, TO_ACCOUNT_ID));
+
         verify(repo, never()).save(any());
     }
 
-    // ── Error handling ────────────────────────────────────────────────────────
+    // ── Error resilience ──────────────────────────────────────────────────────
 
     @Test
     void consume_invalidJson_shouldNotThrowAndNotSave() {
@@ -167,5 +194,38 @@ class TransactionEventConsumerTest {
     void consume_emptyMessage_shouldNotThrowAndNotSave() {
         consumer.consume("");
         verify(repo, never()).save(any());
+    }
+
+    @Test
+    void consume_noRecipient_shouldOnlySaveDebitForSender() {
+        // Event without recipientUserId/toAccountId — only the sender entry should be saved
+        String msgNoRecipient = """
+                {
+                  "transactionId": "%s",
+                  "fromAccountId": "%s",
+                  "senderUserId":  "%s",
+                  "amount":        "75.00"
+                }
+                """.formatted(UUID.randomUUID(), FROM_ACCOUNT_ID, SENDER_USER_ID);
+
+        consumer.consume(msgNoRecipient);
+
+        ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
+        verify(repo, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getUserId()).isEqualTo(SENDER_USER_ID);
+        assertThat(captor.getValue().getTotalDebit()).isEqualByComparingTo("75.00");
+    }
+
+    // ── Category ──────────────────────────────────────────────────────────────
+
+    @Test
+    void consume_categoryIsAlwaysVirement() {
+        consumer.consume(event("99.99"));
+
+        ArgumentCaptor<SpendingAggregate> captor = ArgumentCaptor.forClass(SpendingAggregate.class);
+        verify(repo, atLeastOnce()).save(captor.capture());
+
+        List<SpendingAggregate> all = captor.getAllValues();
+        assertThat(all).allSatisfy(a -> assertThat(a.getCategory()).isEqualTo("Virement"));
     }
 }

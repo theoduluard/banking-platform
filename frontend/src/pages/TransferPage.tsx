@@ -2,7 +2,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useState, useEffect } from 'react'
 import { getUserIdFromToken } from '@/lib/auth'
@@ -73,6 +73,7 @@ export default function TransferPage() {
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
   const userId         = getUserIdFromToken()
+  const queryClient    = useQueryClient()
 
   // ── Idempotency key ──────────────────────────────────────────────────────
   const [idempotencyKey, setIdempotencyKey] = useState(() => generateUUID())
@@ -199,6 +200,7 @@ export default function TransferPage() {
           firstExecutionDate: firstExecDate,
         }, { headers: { 'X-User-Id': userId } })
         toast.success('Virement programmé créé avec succès !')
+        await queryClient.invalidateQueries({ queryKey: ['scheduled-transfers', userId] })
         navigate('/scheduled-transfers')
       } else {
         await api.post('/api/v1/transactions/transfer', {
