@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import { setToken, setRole, getUserRoleFromToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import Logo from '@/components/Logo'
+import { BRAND_GRADIENT } from '@/components/AuthBrandPanel'
 import { ShieldCheck, RotateCcw, AlertCircle, Mail } from 'lucide-react'
 import type { AuthResponse } from '@/types'
 
@@ -24,9 +25,7 @@ export default function OtpVerificationPage() {
 
   const sessionToken = sessionStorage.getItem('otpSessionToken')
 
-  // Guard: redirect to login if the page is accessed directly without a session token.
-  // Runs only on mount — putting sessionToken in deps would cause a spurious redirect
-  // when handleSubmit removes the token from sessionStorage before navigating away.
+  // Guard: redirect to login if accessed directly without a session token.
   useEffect(() => {
     if (!sessionStorage.getItem('otpSessionToken')) {
       navigate('/login', { replace: true })
@@ -157,101 +156,121 @@ export default function OtpVerificationPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
-      <div className="mb-8">
-        <Logo size={36} />
-      </div>
+    <div
+      className="relative flex min-h-screen flex-col items-center justify-center px-4 py-12"
+      style={{ background: BRAND_GRADIENT }}
+    >
+      {/* Decorative blobs */}
+      <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-indigo-600/25 blur-3xl" />
 
-      <div className="w-full max-w-sm space-y-8">
+      {/* Dot grid */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
+          backgroundSize: '26px 26px',
+        }}
+      />
 
-        {/* Header */}
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <ShieldCheck size={28} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Vérification en deux étapes</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Un code à 6 chiffres a été envoyé à votre adresse email.
-            </p>
-          </div>
+      <div className="relative z-10 w-full max-w-sm space-y-6">
+        {/* Logo */}
+        <div className="flex justify-center pb-2">
+          <Logo size={34} className="[&_span]:text-white [&_span:last-child]:text-white/55" />
         </div>
 
-        {/* Error banner */}
-        {error && (
-          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
-            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
-            <p className="text-sm text-red-800">{error}</p>
+        {/* White card */}
+        <div className="rounded-2xl bg-card p-7 shadow-2xl space-y-7">
+
+          {/* Header */}
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <ShieldCheck size={28} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Vérification en deux étapes</h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Un code à 6 chiffres a été envoyé à votre adresse email.
+              </p>
+            </div>
           </div>
-        )}
 
-        {/* OTP input — 6 boxes */}
-        <div className="flex justify-center gap-3" onPaste={handlePaste}>
-          {otp.map((digit, i) => (
-            <input
-              key={i}
-              ref={el => { inputRefs.current[i] = el }}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={e => handleChange(i, e.target.value)}
-              onKeyDown={e => handleKeyDown(i, e)}
-              className="h-14 w-12 rounded-xl border border-input bg-background text-center text-xl font-semibold
-                         shadow-sm transition-all
-                         focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30
-                         disabled:opacity-50"
-              disabled={submitting}
-              autoFocus={i === 0}
-            />
-          ))}
-        </div>
-
-        {/* Timer */}
-        <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
-          {remaining > 0 ? (
-            <>
-              <span>Code valable encore</span>
-              <span className={`tabular-nums font-medium ${remaining < 60 ? 'text-red-600' : 'text-foreground'}`}>
-                {formatTime(remaining)}
-              </span>
-            </>
-          ) : (
-            <span className="text-red-600 font-medium">Code expiré</span>
+          {/* Error banner */}
+          {error && (
+            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
           )}
-        </div>
 
-        {/* Submit button */}
-        <Button
-          className="h-11 w-full text-sm font-medium"
-          onClick={handleSubmit}
-          disabled={submitting || otp.join('').length < 6}
-        >
-          {submitting ? 'Vérification…' : 'Valider le code'}
-        </Button>
+          {/* OTP boxes */}
+          <div className="flex justify-center gap-2.5" onPaste={handlePaste}>
+            {otp.map((digit, i) => (
+              <input
+                key={i}
+                ref={el => { inputRefs.current[i] = el }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={e => handleChange(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(i, e)}
+                className="h-13 w-11 rounded-xl border border-input bg-background text-center text-xl font-semibold
+                           shadow-sm transition-all
+                           focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30
+                           disabled:opacity-50"
+                disabled={submitting}
+                autoFocus={i === 0}
+              />
+            ))}
+          </div>
 
-        {/* Resend + back to login */}
-        <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={handleResend}
-            disabled={resending}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-primary hover:underline disabled:opacity-50"
+          {/* Timer */}
+          <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+            {remaining > 0 ? (
+              <>
+                <span>Code valable encore</span>
+                <span className={`tabular-nums font-medium ${remaining < 60 ? 'text-red-600' : 'text-foreground'}`}>
+                  {formatTime(remaining)}
+                </span>
+              </>
+            ) : (
+              <span className="text-red-600 font-medium">Code expiré</span>
+            )}
+          </div>
+
+          {/* Validate button */}
+          <Button
+            className="h-11 w-full text-sm font-medium"
+            onClick={handleSubmit}
+            disabled={submitting || otp.join('').length < 6}
           >
-            <Mail size={14} />
-            {resending ? 'Envoi en cours…' : 'Renvoyer un nouveau code'}
-          </button>
+            {submitting ? 'Vérification…' : 'Valider le code'}
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => { sessionStorage.removeItem('otpSessionToken'); navigate('/login') }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            <RotateCcw size={12} />
-            Recommencer la connexion
-          </button>
+          {/* Resend + back */}
+          <div className="flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resending}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-primary hover:underline disabled:opacity-50"
+            >
+              <Mail size={14} />
+              {resending ? 'Envoi en cours…' : 'Renvoyer un nouveau code'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { sessionStorage.removeItem('otpSessionToken'); navigate('/login') }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              <RotateCcw size={12} />
+              Recommencer la connexion
+            </button>
+          </div>
+
         </div>
-
       </div>
     </div>
   )

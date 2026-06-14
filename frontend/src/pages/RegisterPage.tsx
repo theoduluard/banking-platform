@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import PasswordInput from '@/components/ui/password-input'
-import Logo from '@/components/Logo'
-import AuthBrandPanel from '@/components/AuthBrandPanel'
+import AuthBrandPanel, { AuthMobileHeader } from '@/components/AuthBrandPanel'
 import { MailCheck, CheckCircle2 } from 'lucide-react'
 
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
@@ -70,11 +69,10 @@ export default function RegisterPage() {
       />
 
       {/* ── Form panel ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">
-        <div className="mb-8 lg:hidden">
-          <Logo size={36} />
-        </div>
+      <div className="flex flex-1 flex-col">
+        <AuthMobileHeader />
 
+        <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-10">
         <div className="w-full max-w-sm space-y-7">
 
           {/* ── Success state ─────────────────────────────────────────────── */}
@@ -164,6 +162,7 @@ export default function RegisterPage() {
               </p>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>
