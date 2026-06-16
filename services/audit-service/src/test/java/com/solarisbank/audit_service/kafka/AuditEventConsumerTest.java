@@ -148,4 +148,23 @@ class AuditEventConsumerTest {
         verify(repo).save(captor.capture());
         assertThat(captor.getValue().getEntityId()).isEqualTo(TX_ID);
     }
+
+    @Test
+    void consumeTransactions_senderUserIdFallback_shouldBeUsedWhenUserIdAbsent() {
+        // Real TransactionCompletedEvent uses "senderUserId" instead of "userId"
+        String message = """
+                {"transactionId":"%s","senderUserId":"%s","fromAccountId":"00000000-0000-0000-0000-000000000001","amount":"500"}
+                """.formatted(TX_ID, USER_ID).strip();
+        when(repo.save(any(AuditEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        consumer.consumeTransactions(message);
+
+        ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(repo).save(captor.capture());
+        AuditEvent event = captor.getValue();
+        assertThat(event.getUserId()).isEqualTo(USER_ID);
+        assertThat(event.getEntityId()).isEqualTo(TX_ID);
+        assertThat(event.getSource()).isEqualTo("transaction-service");
+        assertThat(event.getEntityType()).isEqualTo("TRANSACTION");
+    }
 }
