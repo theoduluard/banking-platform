@@ -59,6 +59,7 @@ class TransactionEventConsumerTest {
 
     /** Builds a valid transaction.completed JSON event. */
     private String event(String amount) {
+        LocalDate today = LocalDate.now();
         return """
                 {
                   "transactionId":   "%s",
@@ -68,12 +69,12 @@ class TransactionEventConsumerTest {
                   "recipientUserId": "%s",
                   "amount":          "%s",
                   "currency":        "EUR",
-                  "completedAt":     "2026-06-%02dT10:00:00"
+                  "completedAt":     "%d-%02d-%02dT10:00:00"
                 }
                 """.formatted(
                 UUID.randomUUID(), FROM_ACCOUNT_ID, TO_ACCOUNT_ID,
                 SENDER_USER_ID, RECIPIENT_USER_ID,
-                amount, LocalDate.now().getDayOfMonth());
+                amount, today.getYear(), today.getMonthValue(), today.getDayOfMonth());
     }
 
     // ── Debit entry ───────────────────────────────────────────────────────────
