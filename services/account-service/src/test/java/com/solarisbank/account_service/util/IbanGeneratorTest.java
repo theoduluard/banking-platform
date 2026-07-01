@@ -18,6 +18,13 @@ class IbanGeneratorTest {
     }
 
     @Test
+    void generate_shouldStartWithFR76() {
+        for (int i = 0; i < 10; i++) {
+            assertThat(ibanGenerator.generate()).startsWith("FR76");
+        }
+    }
+
+    @Test
     void generate_shouldHaveLength25() {
         // FR(2) + check(2) + BANK(5) + BRANCH(5) + account(11) = 25
         assertThat(ibanGenerator.generate()).hasSize(25);

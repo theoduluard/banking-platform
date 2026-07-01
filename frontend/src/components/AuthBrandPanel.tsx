@@ -56,22 +56,15 @@ export default function AuthBrandPanel({ title, subtitle }: AuthBrandPanelProps)
   return (
     <div
       className="relative hidden w-5/12 flex-col justify-between overflow-hidden lg:flex"
-      style={{ background: BRAND_GRADIENT }}
+      style={{
+        backgroundImage:
+          'url(https://images.unsplash.com/photo-1470770841072-f978cf4d019e?q=80&w=1000&auto=format&fit=crop)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
     >
-      {/* Decorative blobs */}
-      <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-indigo-600/25 blur-3xl" />
-      <div className="pointer-events-none absolute left-1/3 top-1/2 h-56 w-56 -translate-y-1/2 rounded-full bg-sky-400/10 blur-2xl" />
-
-      {/* Dot grid overlay */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
-          backgroundSize: '26px 26px',
-        }}
-      />
+      {/* Dark overlay for text readability */}
+      <div className="pointer-events-none absolute inset-0 bg-black/58" />
 
       {/* Logo */}
       <div className="relative z-10 p-10">

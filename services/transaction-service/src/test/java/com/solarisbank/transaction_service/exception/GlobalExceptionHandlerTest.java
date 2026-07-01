@@ -85,7 +85,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void handleGenericException_shouldReturn500() {
-        ResponseEntity<Map<String, Object>> response = handler.handleGenericException();
+        ResponseEntity<Map<String, Object>> response = handler.handleGenericException(new RuntimeException("test"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody()).containsEntry("status", 500);

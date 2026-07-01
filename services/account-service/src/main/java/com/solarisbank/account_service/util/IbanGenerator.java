@@ -14,10 +14,13 @@ public class IbanGenerator {
     private static final String BRANCH_CODE  = "00001";
 
     public String generate() {
-        String accountNumber = String.format("%011d", new Random().nextLong(99999999999L));
-        String bban = BANK_CODE + BRANCH_CODE + accountNumber;
-        String checkDigits = computeCheckDigits(bban);
-        return COUNTRY_CODE + checkDigits + bban;
+        String iban;
+        do {
+            String accountNumber = String.format("%011d", new Random().nextLong(99_999_999_999L));
+            String bban = BANK_CODE + BRANCH_CODE + accountNumber;
+            iban = COUNTRY_CODE + computeCheckDigits(bban) + bban;
+        } while (!iban.startsWith("FR76"));
+        return iban;
     }
 
     private String computeCheckDigits(String bban) {

@@ -1,13 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import api from '@/lib/api'
 import type { AdminUser, Page } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { Users, Search, UserCheck, UserX, ShieldCheck, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Users, Search, UserCheck, UserX, ShieldCheck,
+  ChevronUp, ChevronDown, ChevronsUpDown, Mail, Calendar, Eye,
+} from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +44,9 @@ function SortIcon({ col, sortKey, dir }: { col: SortKey; sortKey: SortKey; dir: 
 
 export default function AdminUsersPage() {
   const qc = useQueryClient()
+
+  // ── Selected user (detail dialog) ─────────────────────────────────────────
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
 
   // ── Filtering & sorting state ──────────────────────────────────────────────
   const [search,       setSearch]       = useState('')
@@ -256,6 +266,7 @@ export default function AdminUsersPage() {
                   key={u.userId}
                   user={u}
                   onToggle={() => toggleStatus.mutate({ id: u.userId, active: !u.isActive })}
+                  onSelect={() => setSelectedUser(u)}
                   isPending={toggleStatus.isPending}
                 />
               ))}
@@ -325,19 +336,119 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+      {/* ── User detail dialog ────────────────────────────────────────────── */}
+      <Dialog open={!!selectedUser} onOpenChange={o => !o && setSelectedUser(null)}>
+        <DialogContent className="sm:max-w-sm">
+          {selectedUser && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="sr-only">Fiche client</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Détails et actions pour {selectedUser.firstname} {selectedUser.lastname}
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Avatar + identity */}
+              <div className="flex flex-col items-center gap-3 pt-2 pb-4">
+                <div className="flex size-16 items-center justify-center rounded-full bg-muted text-xl font-bold uppercase text-muted-foreground">
+                  {selectedUser.firstname[0]}{selectedUser.lastname[0]}
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold">
+                    {selectedUser.firstname} {selectedUser.lastname}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                    selectedUser.role === 'ADMIN'
+                      ? 'border-primary/30 bg-primary/10 text-primary'
+                      : 'border-border bg-muted text-muted-foreground',
+                  )}>
+                    {selectedUser.role === 'ADMIN' && <ShieldCheck size={10} />}
+                    {selectedUser.role}
+                  </span>
+                  <span className={cn(
+                    'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                    selectedUser.isActive
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-red-200 bg-red-50 text-red-700',
+                  )}>
+                    {selectedUser.isActive ? 'Actif' : 'Inactif'}
+                  </span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Details */}
+              <div className="space-y-2.5 py-3">
+                <div className="flex items-center gap-2.5 text-sm">
+                  <Mail size={14} className="shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">Email</span>
+                  <span className="ml-auto truncate text-right font-medium">{selectedUser.email}</span>
+                </div>
+                {selectedUser.createdAt && (
+                  <div className="flex items-center gap-2.5 text-sm">
+                    <Calendar size={14} className="shrink-0 text-muted-foreground" />
+                    <span className="text-muted-foreground">Inscrit le</span>
+                    <span className="ml-auto font-medium">{formatDate(selectedUser.createdAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Actions */}
+              <DialogFooter className="flex-col gap-2 pt-2 sm:flex-col">
+                <Link
+                  to="/admin/messages"
+                  onClick={() => setSelectedUser(null)}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full gap-2')}
+                >
+                  <Mail size={14} />
+                  Envoyer un message
+                </Link>
+                {selectedUser.role !== 'ADMIN' && (
+                  <Button
+                    variant={selectedUser.isActive ? 'destructive' : 'default'}
+                    size="sm"
+                    className="w-full gap-2"
+                    disabled={toggleStatus.isPending}
+                    onClick={() => {
+                      toggleStatus.mutate({ id: selectedUser.userId, active: !selectedUser.isActive })
+                      setSelectedUser(null)
+                    }}
+                  >
+                    {selectedUser.isActive
+                      ? <><UserX size={14} /> Désactiver ce compte</>
+                      : <><UserCheck size={14} /> Activer ce compte</>
+                    }
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 // ── UserRow ────────────────────────────────────────────────────────────────────
 
-function UserRow({ user: u, onToggle, isPending }: {
+function UserRow({ user: u, onToggle, onSelect, isPending }: {
   user: AdminUser
   onToggle: () => void
+  onSelect: () => void
   isPending: boolean
 }) {
   return (
-    <div className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/30">
+    <div
+      className="flex cursor-pointer items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/30"
+      onClick={onSelect}
+    >
       {/* Avatar */}
       <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-muted-foreground">
         {u.firstname[0]}{u.lastname[0]}
@@ -382,7 +493,7 @@ function UserRow({ user: u, onToggle, isPending }: {
               ? 'text-red-600 hover:bg-red-50 hover:text-red-700'
               : 'text-emerald-700 hover:bg-emerald-50',
           )}
-          onClick={onToggle}
+          onClick={e => { e.stopPropagation(); onToggle() }}
           disabled={isPending}
         >
           {u.isActive

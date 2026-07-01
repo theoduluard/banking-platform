@@ -31,7 +31,12 @@ const schema = z.object({
   iban: z
     .string()
     .min(1, 'IBAN requis')
-    .regex(/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/, 'Format IBAN invalide (ex: FR7630006000011234567890189)'),
+    // Normalize first (strip spaces, uppercase) then validate format
+    .transform(v => v.toUpperCase().replace(/\s/g, ''))
+    .refine(
+      v => /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/.test(v),
+      'Format IBAN invalide (ex: FR76 3000 6000 0112 3456 7890 189)',
+    ),
 })
 type FormData = z.infer<typeof schema>
 
@@ -130,7 +135,7 @@ export default function BeneficiariesPage() {
   })
 
   function onSubmit(data: FormData) {
-    addMutation.mutate({ ...data, iban: data.iban.toUpperCase().replace(/\s/g, '') })
+    addMutation.mutate(data)
   }
 
   return (
