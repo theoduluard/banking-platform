@@ -25,9 +25,9 @@ class IbanGeneratorTest {
     }
 
     @Test
-    void generate_shouldHaveLength25() {
-        // FR(2) + check(2) + BANK(5) + BRANCH(5) + account(11) = 25
-        assertThat(ibanGenerator.generate()).hasSize(25);
+    void generate_shouldHaveLength27() {
+        // FR(2) + check(2) + BANK(5) + BRANCH(5) + account(11) + RIB_KEY(2) = 27
+        assertThat(ibanGenerator.generate()).hasSize(27);
     }
 
     @Test
@@ -58,6 +58,16 @@ class IbanGeneratorTest {
         // Branch code 00001 commence à la position 9
         String iban = ibanGenerator.generate();
         assertThat(iban.substring(9, 14)).isEqualTo("00001");
+    }
+
+    @Test
+    void generate_shouldContainValidRibKey() {
+        // Clé RIB sur 2 chiffres en position 25-26 (après n° de compte)
+        String iban = ibanGenerator.generate();
+        String ribKey = iban.substring(25, 27);
+        assertThat(ribKey).matches("\\d{2}");
+        int key = Integer.parseInt(ribKey);
+        assertThat(key).isBetween(1, 97);
     }
 
     /**
