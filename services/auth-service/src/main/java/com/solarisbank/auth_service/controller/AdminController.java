@@ -4,14 +4,18 @@ import com.solarisbank.auth_service.dto.UserAdminResponse;
 import com.solarisbank.auth_service.exception.BusinessException;
 import com.solarisbank.auth_service.model.User;
 import com.solarisbank.auth_service.repository.UserRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -42,11 +46,10 @@ public class AdminController {
 
         requireAdmin(userRole);
 
-        // Map frontend sort key → entity field name
         String sortField = switch (sortBy) {
             case "email" -> "email";
             case "date"  -> "createdAt";
-            default      -> "lastname";   // "name" or unknown → lastname
+            default      -> "lastname";
         };
 
         Sort sort = sortDir.equalsIgnoreCase("desc")
@@ -62,12 +65,38 @@ public class AdminController {
         if ("ACTIVE".equals(status))   isActive = true;
         if ("INACTIVE".equals(status)) isActive = false;
 
-        // Treat blank search as no filter
         String searchParam = (search != null && !search.isBlank()) ? search : null;
 
-        Page<UserAdminResponse> result = userRepository
-                .findWithFilters(searchParam, roleEnum, isActive, pageable)
-                .map(this::toResponse);
+        // Use Specification (Criteria API) to avoid Hibernate 7 null parameter type
+        // inference failures that occur with JPQL ":param IS NULL" on enum/boolean params.
+        final User.Role  roleFinal     = roleEnum;
+        final Boolean    isActiveFinal = isActive;
+        final String     searchFinal   = searchParam;
+
+        Specification<User> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (searchFinal != null) {
+                String pattern = "%" + searchFinal.toLowerCase() + "%";
+                predicates.add(cb.like(
+                    cb.lower(cb.concat(cb.concat(cb.concat(cb.concat(
+                        root.get("firstname"), " "), root.get("lastname")), " "), root.get("email"))),
+                    pattern
+                ));
+            }
+
+            if (roleFinal != null) {
+                predicates.add(cb.equal(root.get("role"), roleFinal));
+            }
+
+            if (isActiveFinal != null) {
+                predicates.add(cb.equal(root.get("isActive"), isActiveFinal));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<UserAdminResponse> result = userRepository.findAll(spec, pageable).map(this::toResponse);
 
         return ResponseEntity.ok(result);
     }
@@ -85,7 +114,6 @@ public class AdminController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("User not found", HttpStatus.NOT_FOUND));
 
-        // Prevent deactivating admins
         if (user.getRole() == User.Role.ADMIN && !active) {
             throw new BusinessException("Cannot deactivate an admin account", HttpStatus.FORBIDDEN);
         }

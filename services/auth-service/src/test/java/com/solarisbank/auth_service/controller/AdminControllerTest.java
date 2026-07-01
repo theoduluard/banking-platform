@@ -15,6 +15,8 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.mockito.ArgumentMatchers;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -67,7 +69,7 @@ class AdminControllerTest {
     @Test
     void getAllUsers_shouldReturn200_withPagedUserList() throws Exception {
         Page<User> usersPage = new PageImpl<>(List.of(activeClient));
-        when(userRepository.findWithFilters(isNull(), isNull(), isNull(), any(Pageable.class)))
+        when(userRepository.findAll(ArgumentMatchers.<Specification<User>>any(), ArgumentMatchers.<Pageable>any()))
                 .thenReturn(usersPage);
 
         mockMvc.perform(get("/api/v1/admin/users")
