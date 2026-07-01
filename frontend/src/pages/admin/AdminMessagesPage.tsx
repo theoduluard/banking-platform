@@ -62,11 +62,12 @@ function UserSearchCombobox({
   const listRef      = useRef<HTMLUListElement>(null)
 
   // Fetch all users once (shared cache with AdminUsersPage)
-  const { data: allUsers = [], isLoading: loadingUsers } = useQuery<AdminUser[]>({
+  const { data: usersPage, isLoading: loadingUsers } = useQuery<Page<AdminUser>>({
     queryKey: ['admin', 'users'],
-    queryFn:  () => api.get<AdminUser[]>('/api/v1/admin/users').then(r => r.data),
+    queryFn:  () => api.get<Page<AdminUser>>('/api/v1/admin/users?size=200').then(r => r.data),
     staleTime: 5 * 60_000,
   })
+  const allUsers = usersPage?.content ?? []
 
   const clients = useMemo(() => allUsers.filter(u => u.role === 'CLIENT'), [allUsers])
 
@@ -388,11 +389,12 @@ export default function AdminMessagesPage() {
   })
 
   // Reuse the users cache (shared with UserSearchCombobox) to resolve userId → name
-  const { data: allUsers = [] } = useQuery<AdminUser[]>({
+  const { data: usersPageHistory } = useQuery<Page<AdminUser>>({
     queryKey: ['admin', 'users'],
-    queryFn:  () => api.get<AdminUser[]>('/api/v1/admin/users').then(r => r.data),
+    queryFn:  () => api.get<Page<AdminUser>>('/api/v1/admin/users?size=200').then(r => r.data),
     staleTime: 5 * 60_000,
   })
+  const allUsers = usersPageHistory?.content ?? []
   const userMap = useMemo(
     () => new Map(allUsers.map(u => [u.userId, u])),
     [allUsers],
